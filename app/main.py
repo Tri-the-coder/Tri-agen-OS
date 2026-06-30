@@ -4,12 +4,16 @@ from typing import Any, Dict
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
+from app.services.openrouter import get_openrouter_client
+
 from app.api.health import health_bp
 from app.api.webhook import webhook_bp
 from app.agent.orchestrator import AgentOrchestrator
 from app.db.session import init_db
 
 load_dotenv()
+
+client = get_openrouter_client()
 
 
 def create_app(testing: bool = False) -> Flask:
