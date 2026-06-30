@@ -10,7 +10,7 @@ load_dotenv()
 class OpenRouterClient:
     def __init__(self) -> None:
         self.api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-        self.model = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat").strip()
+        self.model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3-8b-instruct:free").strip()
         self.base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
 
     def health_check(self) -> Dict[str, Any]:
@@ -45,8 +45,8 @@ class OpenRouterClient:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": os.getenv("APP_URL", "https://example.com"),
-            "X-Title": "tri-buddy-agent",
+            "HTTP-Referer": os.getenv("APP_URL", "https://onrender.com"),
+            "X-Title": "Zenzap Control Bot",
         }
 
         try:
