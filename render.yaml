@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: tri-buddy-agent
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn bot:app
+    envVars:
+      - key: PORT
+        value: 10000

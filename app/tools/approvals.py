@@ -1,0 +1,22 @@
+from typing import Any, Dict
+
+
+class ApprovalService:
+    def __init__(self) -> None:
+        self.pending: list[Dict[str, Any]] = []
+
+    def create_approval(self, action: str, details: str) -> Dict[str, Any]:
+        approval_id = len(self.pending) + 1
+        self.pending.append({"id": approval_id, "action": action, "details": details})
+        return {
+            "ok": True,
+            "message": f"Approval required for {action}. Reply APPROVE {approval_id} to confirm.",
+            "approval_id": approval_id,
+        }
+
+    def approve(self, approval_id: int) -> Dict[str, Any]:
+        for item in self.pending:
+            if item["id"] == approval_id:
+                self.pending.remove(item)
+                return {"ok": True, "message": f"Approved action: {item['action']}"}
+        return {"ok": False, "message": "Approval not found"}
