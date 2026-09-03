@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
 from openrouter_client import OpenRouterClient
-from zenzap_client import ZenzapClient
+from telegram_client import TelegramClient
 
 load_dotenv()
 
 app = Flask(__name__)
-zenzap_client = ZenzapClient()
+telegram_client = TelegramClient()
 air_client = OpenRouterClient()
 
 
@@ -23,7 +23,7 @@ def index() -> Dict[str, Any]:
 def health() -> Dict[str, Any]:
     return {
         "status": "ok",
-        "zenzap": zenzap_client.health_check(),
+        "telegram": telegram_client.health_check(),
         "openrouter": air_client.health_check(),
     }
 
@@ -35,7 +35,7 @@ def message() -> Dict[str, Any]:
     if not text:
         return jsonify({"ok": False, "error": "message is required"}), 400
 
-    result = zenzap_client.send_message(text)
+    result = telegram_client.send_message(text)
     return jsonify(result)
 
 

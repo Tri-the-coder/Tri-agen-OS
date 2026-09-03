@@ -9,4 +9,4 @@ def draft_proposal_email(client_name: str, project_value: str = "") -> Dict[str,
         f"We would be happy to support your project{(' for ' + project_value) if project_value else ''}.\n\n"
         "Best regards,\nTri"
     )
-    return {"ok": True, "subject": subject, "body": body, "message": "Approval required before sending."}
+    return {"ok": True, "subject": subject, "body": body, "message": "পাঠানোর আগে অনুমোদন প্রয়োজন।"}

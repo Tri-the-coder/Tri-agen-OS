@@ -20,7 +20,7 @@ def health():
     ai_service: AIService = current_app.extensions["ai_service"]
     return {
         "status": "ok",
-        "zenzap": ai_service.zenzap_client.health_check(),
+        "telegram": ai_service.telegram_client.health_check(),
         "openrouter": ai_service.ai_client.health_check(),
     }
 
@@ -33,7 +33,7 @@ def message():
     if not text:
         return jsonify({"ok": False, "error": "message is required"}), 400
 
-    result = ai_service.send_to_zenzap(text)
+    result = ai_service.send_to_telegram(text)
     return jsonify(result)
 
 

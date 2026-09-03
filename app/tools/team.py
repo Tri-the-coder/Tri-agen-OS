@@ -10,4 +10,4 @@ def assign_task_to_member(task_title: str, member_name: str) -> Dict[str, Any]:
             (task_title, "assigned", member_name),
         )
         conn.commit()
-    return {"ok": True, "message": f"Assigned '{task_title}' to {member_name}"}
+    return {"ok": True, "message": f"'{task_title}' {member_name}-কে দেওয়া হয়েছে"}

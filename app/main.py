@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any, Dict
 
@@ -11,47 +12,46 @@ from app.db.session import init_db
 
 load_dotenv()
 
-ZENZAP_BASE_URL = os.getenv("ZENZAP_BASE_URL", "https://api.zenzap.co").rstrip("/")
+logger = logging.getLogger(__name__)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 OPENROUTER_URL = os.getenv("OPENROUTER_URL", "https://openrouter.ai/api/v1").rstrip("/")
 
 
-def zenzap_webhook():
+def telegram_webhook():
     payload = request.get_json(silent=True) or {}
-    event_type = payload.get("event")
-    data = payload.get("data", {})
 
-    sender = data.get("sender", {})
-    raw_message = data.get("message", payload.get("message", {}))
-    if isinstance(raw_message, dict):
-        incoming_text = (raw_message.get("text") or payload.get("text") or "").strip()
-    else:
-        incoming_text = (raw_message or payload.get("text") or "").strip()
-    topic_id = data.get("topic_id") or payload.get("topic_id")
+    webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    if webhook_secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token") != webhook_secret:
+        return jsonify({"status": "ignored", "reason": "invalid_secret"}), 403
 
-    if sender.get("is_bot") is True or (
-        sender.get("id") is not None and sender.get("id") == os.getenv("ZENZAP_BOT_ID")
-    ):
+    message = payload.get("message") or payload.get("edited_message") or {}
+    sender = message.get("from", {})
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    incoming_text = (message.get("text") or "").strip()
+
+    logger.info(
+        "Incoming Telegram webhook | chat_id=%s sender_id=%s text=%r",
+        chat_id,
+        sender.get("id"),
+        incoming_text,
+    )
+
+    if sender.get("is_bot") is True:
         return jsonify({"status": "ignored", "reason": "loop_protection"}), 200
 
     if not incoming_text:
         return jsonify({"status": "ignored", "reason": "missing_context"}), 200
 
-    bot_mention = os.getenv("ZENZAP_BOT_MENTION", "@Tri's buddy")
-    require_mention = os.getenv("ZENZAP_REQUIRE_MENTION", "false").lower() == "true"
-    if bot_mention in incoming_text:
-        prompt_content = incoming_text.replace(bot_mention, "").strip()
-    elif not data and payload.get("message"):
-        prompt_content = incoming_text
-    elif not require_mention:
-        prompt_content = incoming_text
-    else:
-        return jsonify({"status": "ignored", "reason": "not_mentioned"}), 200
+    prompt_content = incoming_text
 
-    if not topic_id and current_app.config["TESTING"]:
+    if chat_id is None and current_app.config["TESTING"]:
         result = current_app.config.get("agent_orchestrator").handle_message(prompt_content)
+        logger.info("Testing fallback reply | chat_id=%s reply=%s", chat_id, result.get("message"))
         return jsonify(result), 200
 
-    if not topic_id:
+    if chat_id is None:
         return jsonify({"status": "ignored", "reason": "missing_context"}), 200
 
     ai_text: str = ""
@@ -59,14 +59,22 @@ def zenzap_webhook():
         openrouter_headers = {
             "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
             "HTTP-Referer": os.getenv("APP_URL", "https://onrender.com"),
-            "X-Title": "Zenzap Control Agent Builder",
+            "X-Title": "Telegram Control Agent Builder",
             "Content-Type": "application/json",
         }
 
         openrouter_payload = {
-            "model": os.getenv("OPENROUTER_MODEL", "openrouter/free"),
+            "model": os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
             "messages": [
-                {"role": "system", "content": "You are a helpful, elite enterprise workspace assistant."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Tri's Buddy OS, a helpful enterprise workspace assistant for a "
+                        "Bangladeshi business. You must respond ONLY in Bengali (বাংলা script). "
+                        "Never respond in English, even if the user writes in English. This is a "
+                        "strict rule with no exceptions. Keep a friendly, professional tone."
+                    ),
+                },
                 {"role": "user", "content": prompt_content},
             ],
         }
@@ -85,24 +93,22 @@ def zenzap_webhook():
             raise ValueError("OpenRouter returned an empty message")
 
     except Exception as error:
-        print(f"[SCALABLE LOG SYSTEM EXCEPTION]: {str(error)}")
+        logger.exception("OpenRouter request failed | chat_id=%s error=%s", chat_id, error)
         fallback = current_app.config.get("agent_orchestrator").handle_message(prompt_content)
         ai_text = fallback.get("message") or "I ran into an issue and could not process that request right now."
 
-    zenzap_headers = {
-        "X-API-Key": os.getenv("ZENZAP_API_KEY"),
-        "X-API-Secret": os.getenv("ZENZAP_API_SECRET"),
-        "Content-Type": "application/json",
-    }
+    logger.info("Orchestrator reply | chat_id=%s reply=%s", chat_id, ai_text)
 
-    zenzap_payload = {"text": ai_text}
-    send_url = f"{ZENZAP_BASE_URL}/v1/topics/{topic_id}/messages"
+    telegram_payload = {"chat_id": chat_id, "text": ai_text}
+    send_url = f"{TELEGRAM_API_URL}/sendMessage"
 
+    logger.info("Sending reply to Telegram | chat_id=%s url=%s", chat_id, send_url)
     try:
-        dispatch_response = requests.post(send_url, headers=zenzap_headers, json=zenzap_payload, timeout=10)
+        dispatch_response = requests.post(send_url, json=telegram_payload, timeout=10)
         dispatch_response.raise_for_status()
+        logger.info("Telegram dispatch success | chat_id=%s status=%s", chat_id, dispatch_response.status_code)
     except Exception as error:
-        print(f"[SCALABLE LOG SYSTEM EXCEPTION]: {str(error)}")
+        logger.exception("Telegram dispatch failed | chat_id=%s error=%s", chat_id, error)
         if current_app.config["TESTING"]:
             return jsonify({"ok": False, "message": str(error)}), 500
         return jsonify({"status": "dispatch_error", "message": str(error)}), 500
@@ -110,7 +116,7 @@ def zenzap_webhook():
     if current_app.config["TESTING"]:
         return jsonify({"ok": True, "message": ai_text}), 200
 
-    return jsonify({"status": "success", "processed_topic": topic_id}), 200
+    return jsonify({"status": "success", "processed_chat": chat_id}), 200
 
 
 def create_app(testing: bool = False) -> Flask:

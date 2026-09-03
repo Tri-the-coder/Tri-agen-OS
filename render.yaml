@@ -9,6 +9,12 @@ services:
       - key: PORT
         value: 10000
       - key: OPENROUTER_API_KEY
-        value: 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
+        sync: false
       - key: OPENROUTER_MODEL
-        value: deepseek/deepseek-chat
+        value: meta-llama/llama-3.3-70b-instruct
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false

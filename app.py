@@ -7,7 +7,7 @@ from flask import Flask
 from routes.main import register_routes
 from services.ai import AIService
 from services.memory import ConversationMemory
-from zenzap_client import ZenzapClient
+from telegram_client import TelegramClient
 from openrouter_client import OpenRouterClient
 
 load_dotenv()
@@ -18,9 +18,9 @@ def create_app(testing: bool = False) -> Flask:
     app.config["TESTING"] = testing
 
     memory = ConversationMemory()
-    zenzap_client = ZenzapClient()
+    telegram_client = TelegramClient()
     ai_client = OpenRouterClient()
-    ai_service = AIService(ai_client=ai_client, memory=memory, zenzap_client=zenzap_client)
+    ai_service = AIService(ai_client=ai_client, memory=memory, telegram_client=telegram_client)
 
     register_routes(app, ai_service)
     return app

@@ -10,7 +10,7 @@ class ApprovalService:
         self.pending.append({"id": approval_id, "action": action, "details": details})
         return {
             "ok": True,
-            "message": f"Approval required for {action}. Reply APPROVE {approval_id} to confirm.",
+            "message": f"{action}-এর জন্য অনুমোদন প্রয়োজন। নিশ্চিত করতে 'APPROVE {approval_id}' লিখে পাঠান।",
             "approval_id": approval_id,
         }
 
@@ -18,5 +18,5 @@ class ApprovalService:
         for item in self.pending:
             if item["id"] == approval_id:
                 self.pending.remove(item)
-                return {"ok": True, "message": f"Approved action: {item['action']}"}
-        return {"ok": False, "message": "Approval not found"}
+                return {"ok": True, "message": f"অনুমোদিত হয়েছে: {item['action']}"}
+        return {"ok": False, "message": "অনুমোদন খুঁজে পাওয়া যায়নি"}

@@ -23,13 +23,13 @@ class AgentOrchestrator:
             match = re.match(r"add task:\s*(.+)", message, flags=re.IGNORECASE)
             title = match.group(1).strip() if match else message.replace("Add task:", "", 1).strip()
             task = add_task(title)
-            return {"ok": True, "message": f"Task created: {task['title']}"}
+            return {"ok": True, "message": f"টাস্ক তৈরি হয়েছে: {task['title']}"}
 
         if lowered.startswith("add lead"):
             match = re.match(r"add lead:\s*(.+)", message, flags=re.IGNORECASE)
             details = match.group(1).strip() if match else message.replace("Add lead:", "", 1).strip()
             lead = add_lead(details)
-            return {"ok": True, "message": f"Lead added: {lead['name']}"}
+            return {"ok": True, "message": f"লিড যোগ করা হয়েছে: {lead['name']}"}
 
         if lowered.startswith("assign") and "to" in lowered:
             match = re.match(r"assign\s+(.+?)\s+to\s+(.+)", message, flags=re.IGNORECASE)
@@ -46,14 +46,14 @@ class AgentOrchestrator:
                 key = match.group(1).strip()
                 value = match.group(2).strip()
                 self.memory.remember(key, value)
-                return {"ok": True, "message": f"Remembered: {key} = {value}"}
+                return {"ok": True, "message": f"মনে রাখা হয়েছে: {key} = {value}"}
 
         if lowered.startswith("what do you know"):
             memory_items = self.memory.search("")
             if memory_items:
                 details = "; ".join(f"{item['key']}: {item['value']}" for item in memory_items)
-                return {"ok": True, "message": f"I know: {details}"}
-            return {"ok": True, "message": "I do not know much yet."}
+                return {"ok": True, "message": f"আমি জানি: {details}"}
+            return {"ok": True, "message": "আমি এখনও তেমন কিছু জানি না।"}
 
         if lowered.startswith("draft") and "email" in lowered:
             client_name = message.replace("Draft a proposal email for", "", 1).strip()
@@ -61,7 +61,7 @@ class AgentOrchestrator:
             approval = self.approvals.create_approval("send email draft", client_name)
             return {
                 "ok": True,
-                "message": f"Approval required before sending. Draft created for {client_name}. {approval['message']}",
+                "message": f"পাঠানোর আগে অনুমোদন প্রয়োজন। {client_name}-এর জন্য খসড়া তৈরি হয়েছে। {approval['message']}",
                 "draft": draft,
             }
 
@@ -70,4 +70,7 @@ class AgentOrchestrator:
             if match:
                 return self.approvals.approve(int(match.group(1)))
 
-        return {"ok": True, "message": f"I received: {message}"}
+        if lowered in {"hello", "hi", "hey"}:
+            return {"ok": True, "message": "হ্যালো! আমি ট্রাই বাডি ওএস 🚀"}
+
+        return {"ok": True, "message": f"আমি পেয়েছি: {message}"}

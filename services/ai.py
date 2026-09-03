@@ -1,15 +1,15 @@
 from typing import Any, Dict, Optional
 
 from services.memory import ConversationMemory
-from zenzap_client import ZenzapClient
+from telegram_client import TelegramClient
 from openrouter_client import OpenRouterClient
 
 
 class AIService:
-    def __init__(self, ai_client: OpenRouterClient, memory: ConversationMemory, zenzap_client: ZenzapClient) -> None:
+    def __init__(self, ai_client: OpenRouterClient, memory: ConversationMemory, telegram_client: TelegramClient) -> None:
         self.ai_client = ai_client
         self.memory = memory
-        self.zenzap_client = zenzap_client
+        self.telegram_client = telegram_client
 
     def generate_reply(self, message: str, session_id: str = "default") -> Dict[str, Any]:
         self.memory.add_message(session_id, "user", message)
@@ -20,8 +20,8 @@ class AIService:
             self.memory.add_message(session_id, "assistant", response.get("response", ""))
         return response
 
-    def send_to_zenzap(self, message: str) -> Dict[str, Any]:
-        return self.zenzap_client.send_message(message)
+    def send_to_telegram(self, message: str) -> Dict[str, Any]:
+        return self.telegram_client.send_message(message)
 
     def _build_prompt(self, history: list[dict]) -> str:
         if not history:

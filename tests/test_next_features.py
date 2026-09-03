@@ -9,19 +9,19 @@ def test_team_command_and_approval_flow():
     client = app.test_client()
 
     task_response = client.post(
-        "/api/webhook/zenzap",
-        json={"message": "Assign Rahim to design the homepage"},
+        "/api/webhook/telegram",
+        json={"message": {"text": "Assign Rahim to design the homepage"}},
     )
     assert task_response.status_code == 200
 
     approval_response = client.post(
-        "/api/webhook/zenzap",
-        json={"message": "Draft a proposal email for ABC Store"},
+        "/api/webhook/telegram",
+        json={"message": {"text": "Draft a proposal email for ABC Store"}},
     )
     assert approval_response.status_code == 200
     payload = approval_response.get_json()
     assert payload["ok"] is True
-    assert "approval" in payload["message"].lower()
+    assert "অনুমোদন" in payload["message"]
 
 
 def test_memory_round_trip():
