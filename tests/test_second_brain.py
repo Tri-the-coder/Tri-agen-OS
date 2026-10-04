@@ -67,7 +67,8 @@ def test_no_facts_asks_the_team_to_save_some():
 
 
 def test_long_values_are_truncated():
-    prompt = build_prompt([{"key": "notes", "value": "x" * 1000}])
+    oversized = "x" * (MAX_MEMORY_VALUE_CHARS + 500)
+    prompt = build_prompt([{"key": "notes", "value": oversized}])
     assert "x" * MAX_MEMORY_VALUE_CHARS + "..." in prompt
     assert "x" * (MAX_MEMORY_VALUE_CHARS + 1) not in prompt
 
@@ -183,3 +184,66 @@ def test_memory_failure_does_not_break_the_reply(monkeypatch):
         memory = Boom()
 
     assert main._stored_facts(FakeOrchestrator()) == []
+
+
+# --- "remember" parsing: real-world phrasings -----------------------------------
+
+@pytest.fixture()
+def orchestrator(fresh_db):
+    fresh_db.init_db()
+    from app.agent.orchestrator import AgentOrchestrator
+
+    return AgentOrchestrator()
+
+
+@pytest.mark.parametrize(
+    "message,key,value",
+    [
+        ("Remember that my website is https://babosayee.shop", "website", "https://babosayee.shop"),
+        ("Remember that my website is: https://babosayee.shop", "website", "https://babosayee.shop"),
+        ("Remember that my core features are: billing, stock", "core features", "billing, stock"),
+        ("Remember that my packages are Dokan 299 / Babsha 699", "packages", "Dokan 299 / Babsha 699"),
+        ("Remember that my launch date is October 20", "launch date", "October 20"),
+    ],
+)
+def test_remember_accepts_is_are_and_colon(orchestrator, message, key, value):
+    result = orchestrator.handle_message(message)
+    assert result["handled"] is True
+    assert orchestrator.memory.recall(key) == value
+
+
+def test_remember_keeps_multi_line_values_whole(orchestrator):
+    message = (
+        "Remember that my core features are: Sales & Billing\n"
+        "Stock & Inventory\n"
+        "Accounts & Reports"
+    )
+    assert orchestrator.handle_message(message)["handled"] is True
+
+    stored = orchestrator.memory.recall("core features")
+    assert "Sales & Billing" in stored
+    assert "Stock & Inventory" in stored
+    assert "Accounts & Reports" in stored
+
+
+def test_remember_handles_bengali_values(orchestrator):
+    orchestrator.handle_message("Remember that my tagline is বিক্রি ও বিলিং সহজ")
+    assert orchestrator.memory.recall("tagline") == "বিক্রি ও বিলিং সহজ"
+
+
+def test_long_feature_list_survives_into_the_prompt(orchestrator):
+    features = "Sales & Billing, Stock & Inventory, " + ", ".join(f"feature {i}" for i in range(80))
+    orchestrator.handle_message(f"Remember that my core features are: {features}")
+
+    prompt = build_prompt(orchestrator.memory.search(""))
+    assert "Sales & Billing" in prompt
+    assert "feature 40" in prompt  # well past the old 200-char cut-off
+
+
+def test_memory_block_is_bounded(orchestrator):
+    from app.agent.prompt import MAX_MEMORY_BLOCK_CHARS
+
+    facts = [{"key": f"k{i}", "value": "x" * 1500} for i in range(40)]
+    prompt = build_prompt(facts)
+    block = prompt.split("WHAT YOU KNOW ABOUT THE BUSINESS")[1]
+    assert len(block) < MAX_MEMORY_BLOCK_CHARS + 2000

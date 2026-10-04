@@ -6,7 +6,10 @@ FREE_MODEL_CHAIN_TEXT = (
 )
 
 MAX_MEMORY_ITEMS = 40
-MAX_MEMORY_VALUE_CHARS = 200
+# A feature list or positioning note is long and is exactly the fact the bot most needs
+# in full, so values get real room. The block total is what keeps the prompt bounded.
+MAX_MEMORY_VALUE_CHARS = 2000
+MAX_MEMORY_BLOCK_CHARS = 8000
 
 BASE_PROMPT = """You are Hermes, the internal second brain for the small team building
 Babosayee, a SaaS product. You work for that team, not for their customers. Nobody outside
@@ -112,6 +115,7 @@ pricing, audience, tooling, brand voice - suggest they save it with
 
 def _format_memories(memories: List[Dict[str, Any]]) -> str:
     lines = []
+    budget = MAX_MEMORY_BLOCK_CHARS
     for item in memories[:MAX_MEMORY_ITEMS]:
         key = str(item.get("key", "")).strip()
         value = str(item.get("value", "")).strip()
@@ -119,7 +123,11 @@ def _format_memories(memories: List[Dict[str, Any]]) -> str:
             continue
         if len(value) > MAX_MEMORY_VALUE_CHARS:
             value = value[:MAX_MEMORY_VALUE_CHARS].rstrip() + "..."
-        lines.append(f"- {key}: {value}")
+        entry = f"- {key}: {value}"
+        if len(entry) > budget:
+            break
+        budget -= len(entry)
+        lines.append(entry)
 
     if not lines:
         return NO_MEMORY_NOTE

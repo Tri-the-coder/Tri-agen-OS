@@ -9,6 +9,18 @@ from app.tools.leads import add_lead
 from app.tools.tasks import add_task
 from app.tools.team import assign_task_to_member
 
+# "is" / "are", with or without a trailing colon. The key stays on one line; the value may
+# run over several, so a pasted list survives intact.
+_VERB = r"\s+(?:is|are)\b\s*:?\s*"
+REMEMBER_MY_PATTERN = re.compile(
+    r"remember\s+that\s+my\s+([^\n]+?)" + _VERB + r"(.+)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+REMEMBER_PATTERN = re.compile(
+    r"remember\s+that\s+([^\n]+?)" + _VERB + r"(.+)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
 
 class AgentOrchestrator:
     def __init__(self) -> None:
@@ -39,9 +51,11 @@ class AgentOrchestrator:
                 return {"handled": True, **assign_task_to_member(task_title, member_name)}
 
         if lowered.startswith("remember"):
-            match = re.match(r"remember\s+that\s+my\s+(.+?)\s+is\s+(.+)", message, flags=re.IGNORECASE)
+            # Accept "is", "are", "is:" and "are:", and let the value span newlines so a
+            # pasted multi-line list is stored whole instead of cut at the first break.
+            match = re.match(REMEMBER_MY_PATTERN, message)
             if not match:
-                match = re.match(r"remember\s+that\s+(.+?)\s+is\s+(.+)", message, flags=re.IGNORECASE)
+                match = re.match(REMEMBER_PATTERN, message)
             if match:
                 key = match.group(1).strip()
                 value = match.group(2).strip()
