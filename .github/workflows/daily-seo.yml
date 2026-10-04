@@ -1,0 +1,26 @@
+name: Daily SEO report
+
+# 03:00 UTC is 09:00 in Dhaka (UTC+6). GitHub's scheduler can run a few minutes
+# late, which is fine for a morning report.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  seo-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the SEO audit
+        env:
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
+          SERVICE_URL: ${{ secrets.SERVICE_URL }}
+        run: |
+          # The free Render instance may be asleep; the first call can be slow.
+          code=$(curl -s -o /tmp/out.json -w '%{http_code}' --max-time 180 \
+            -X POST "$SERVICE_URL/tasks/seo-report" \
+            -H "X-Health-Token: $HEALTH_TOKEN")
+          echo "HTTP $code"
+          cat /tmp/out.json
+          echo
+          test "$code" = "200"

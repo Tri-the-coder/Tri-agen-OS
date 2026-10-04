@@ -146,8 +146,10 @@ def create_app(testing: bool = False) -> Flask:
 
     from app.api.webhook import webhook_bp
     from app.api.slack import slack_bp
+    from app.api.tasks import tasks_bp
     app.register_blueprint(webhook_bp)
     app.register_blueprint(slack_bp)
+    app.register_blueprint(tasks_bp)
     app.register_blueprint(health_bp)
     return app
 

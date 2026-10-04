@@ -134,6 +134,27 @@ silent. Either invite it (`/invite @Babosayee Second brain` in the channel) or a
 `chat:write.public` scope. Setting `SLACK_LEAD_CHANNEL` to the channel ID (`C0...`) avoids
 name-resolution problems.
 
+### Daily SEO report
+
+`POST /tasks/seo-report` audits `SEO_SITE_URL` and posts the result to
+`SLACK_SEO_CHANNEL` (default `babosayee_seo`). It takes the same `HEALTH_TOKEN`, as a
+`token=` query parameter or an `X-Health-Token` header, and `?dry=1` returns the report
+without posting.
+
+Everything in the report is measured from the live page: status, redirects, response
+time, page weight, title and meta description length, H1 count, canonical, indexability,
+viewport, `html lang`, Open Graph, image alt coverage, robots.txt and sitemap.xml. Each
+run is stored, so the next one can report what was fixed and what newly broke.
+
+**It contains no rankings, traffic, impressions or keyword data**, and says so in every
+post. Those need Search Console, which this bot cannot read. A report that quietly
+estimated them would be worse than no report.
+
+Render's free plan has no cron, so scheduling is external:
+`.github/workflows/daily-seo.yml` calls the endpoint at 03:00 UTC (09:00 Dhaka) and needs
+two repository secrets, `SERVICE_URL` and `HEALTH_TOKEN`. The call that wakes a sleeping
+instance is the same one that runs the check.
+
 ### Bot token scopes
 
 `commands`, `chat:write`, `app_mentions:read`, `im:history`, `im:read`, `im:write`,

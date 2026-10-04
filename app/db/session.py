@@ -47,6 +47,18 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_reports_user ON reports (slack_user_id)"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS seo_audits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                checked_at TEXT NOT NULL,
+                passed INTEGER NOT NULL,
+                total INTEGER NOT NULL,
+                payload TEXT NOT NULL
+            )
+            """
+        )
         _migrate_leads(conn)
         conn.commit()
 
