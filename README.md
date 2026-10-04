@@ -17,8 +17,37 @@ python3 bot.py
 
 ## Endpoints
 - GET / -> service status
-- GET /health -> checks the configured Telegram connection
+- GET /health -> liveness plus OpenRouter status (see below)
 - POST /message -> forwards a message to Telegram
+- POST /api/webhook/telegram -> production Telegram webhook
+
+### /health
+
+Public by default and safe to expose, because it reports booleans only:
+
+```json
+{"status":"ok","openrouter":{"configured":true,"reachable":true,"key_valid":true},
+ "models":{"chain_length":3,"all_free":true},"detail":"public"}
+```
+
+Set `HEALTH_TOKEN` and pass it as `?token=<...>` or an `X-Health-Token` header to also get
+the key label, credit limit, remaining free requests and the resolved model chain. Those are
+gated because the endpoint is reachable from the internet on Render.
+
+The key check calls OpenRouter's `GET /key`, which validates auth **without** spending
+free-model quota, so it is safe on every health check. To confirm generation end to end, add
+`&probe=model` -- that spends one free request and reports which model answered, so it is
+token-gated and never automatic.
+
+`status` becomes `degraded` when the key is missing or rejected, but the HTTP code stays
+**200**: the service itself is still healthy and degrades gracefully, so a non-2xx would only
+make Render restart a working process. Add `?strict=1` for a monitor that wants 503 instead.
+
+After a deploy:
+
+```bash
+curl "https://<your-host>/health?token=<HEALTH_TOKEN>&probe=model"
+```
 
 ## Agent model (Hermes)
 

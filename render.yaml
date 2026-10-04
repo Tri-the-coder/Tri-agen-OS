@@ -16,6 +16,8 @@ services:
         value: nvidia/nemotron-3-ultra-550b-a55b:free,poolside/laguna-s-2.1:free,openrouter/free
       - key: OPENROUTER_TIMEOUT
         value: 25
+      - key: HEALTH_TOKEN
+        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
