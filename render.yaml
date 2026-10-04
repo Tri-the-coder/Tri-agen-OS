@@ -11,7 +11,11 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
-        value: meta-llama/llama-3.3-70b-instruct
+        value: nvidia/nemotron-3-ultra-550b-a55b:free
+      - key: OPENROUTER_MODELS
+        value: nvidia/nemotron-3-ultra-550b-a55b:free,poolside/laguna-s-2.1:free,openrouter/free
+      - key: OPENROUTER_TIMEOUT
+        value: 25
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID

@@ -8,7 +8,9 @@ from flask import Flask, current_app, jsonify, request
 
 from app.api.health import health_bp
 from app.agent.orchestrator import AgentOrchestrator
+from app.agent.prompt import build_prompt
 from app.db.session import init_db
+from app.services.models import AllModelsUnavailable, complete
 
 load_dotenv()
 
@@ -16,6 +18,14 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 OPENROUTER_URL = os.getenv("OPENROUTER_URL", "https://openrouter.ai/api/v1").rstrip("/")
+
+RATE_LIMIT_REPLY = (
+    "সব ফ্রি মডেল এখন রেট-লিমিটে আছে। কয়েক মিনিট পরে আবার চেষ্টা করুন, "
+    "অথবা ছোট করে প্রশ্নটি পাঠান।\n\n"
+    "All free models are rate-limited right now. Please try again in a few minutes, "
+    "or send a shorter request."
+)
+GENERIC_ERROR_REPLY = "I ran into an issue and could not process that request right now."
 
 
 def telegram_webhook():
@@ -54,48 +64,29 @@ def telegram_webhook():
     if chat_id is None:
         return jsonify({"status": "ignored", "reason": "missing_context"}), 200
 
-    ai_text: str = ""
-    try:
-        openrouter_headers = {
-            "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
-            "HTTP-Referer": os.getenv("APP_URL", "https://onrender.com"),
-            "X-Title": "Telegram Control Agent Builder",
-            "Content-Type": "application/json",
-        }
+    orchestrator = current_app.config.get("agent_orchestrator")
 
-        openrouter_payload = {
-            "model": os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are Tri's Buddy OS, a helpful enterprise workspace assistant for a "
-                        "Bangladeshi business. You must respond ONLY in Bengali (বাংলা script). "
-                        "Never respond in English, even if the user writes in English. This is a "
-                        "strict rule with no exceptions. Keep a friendly, professional tone."
-                    ),
-                },
-                {"role": "user", "content": prompt_content},
-            ],
-        }
+    # Deterministic commands ("Add task:", "Approve 3", ...) must run before the model,
+    # otherwise the model only talks about them and nothing is ever written to the database.
+    command_result = orchestrator.handle_message(prompt_content)
+    if command_result.get("handled"):
+        ai_text = command_result.get("message") or GENERIC_ERROR_REPLY
+        logger.info("Command handled | chat_id=%s reply=%s", chat_id, ai_text)
+    else:
+        try:
+            result = complete(build_prompt(), prompt_content)
+            ai_text = result["content"]
+            logger.info("Hermes reply | chat_id=%s model=%s", chat_id, result["model"])
 
-        openrouter_response = requests.post(
-            f"{OPENROUTER_URL}/chat/completions",
-            headers=openrouter_headers,
-            json=openrouter_payload,
-            timeout=10,
-        )
-        openrouter_response.raise_for_status()
-        api_data = openrouter_response.json()
-        ai_text = api_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except AllModelsUnavailable as error:
+            logger.warning("Free model chain exhausted | chat_id=%s error=%s", chat_id, error)
+            ai_text = RATE_LIMIT_REPLY if error.rate_limited else (
+                command_result.get("message") or GENERIC_ERROR_REPLY
+            )
 
-        if not ai_text:
-            raise ValueError("OpenRouter returned an empty message")
-
-    except Exception as error:
-        logger.exception("OpenRouter request failed | chat_id=%s error=%s", chat_id, error)
-        fallback = current_app.config.get("agent_orchestrator").handle_message(prompt_content)
-        ai_text = fallback.get("message") or "I ran into an issue and could not process that request right now."
+        except Exception as error:  # noqa: BLE001 - never drop a Telegram update
+            logger.exception("Model call failed | chat_id=%s error=%s", chat_id, error)
+            ai_text = command_result.get("message") or GENERIC_ERROR_REPLY
 
     logger.info("Orchestrator reply | chat_id=%s reply=%s", chat_id, ai_text)
 

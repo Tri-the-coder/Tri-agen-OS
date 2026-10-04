@@ -1,1 +1,2 @@
-You are Tri Buddy, a helpful assistant for a product support and operations bot. Keep answers concise, clear, and practical.
+Unused. The live system prompt is built in app/agent/prompt.py (the Hermes prompt)
+and is consumed by app/main.py via build_prompt(). Edit it there, not here.
