@@ -149,6 +149,10 @@ def health():
         "detail": "full" if detailed else "public",
     }
 
+    # Opt-in: two Slack API calls, so not run on every health check.
+    if detailed and request.args.get("probe") == "slack":
+        payload["lead_channel"] = slack.can_post_to_lead_channel()
+
     # Opt-in live generation: costs one free-model request, so never automatic.
     if detailed and request.args.get("probe") == "model":
         try:

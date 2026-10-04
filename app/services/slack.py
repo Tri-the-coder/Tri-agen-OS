@@ -280,3 +280,58 @@ def post_lead(lead: Dict[str, Any]) -> Dict[str, Any]:
                 lead_channel(),
             )
     return result
+
+
+def can_post_to_lead_channel() -> Dict[str, Any]:
+    """Check channel access without posting anything.
+
+    chat.scheduleMessage performs the same membership and permission checks as
+    chat.postMessage, so it surfaces not_in_channel - but the message can be
+    deleted before it ever sends. Needs only chat:write.
+    """
+    channel = lead_channel()
+    if not bot_token():
+        return {"channel": channel, "can_post": False, "error": "SLACK_BOT_TOKEN is not set"}
+
+    headers = {"Authorization": f"Bearer {bot_token()}"}
+    post_at = int(time.time()) + 600  # far enough out to cancel comfortably
+
+    try:
+        scheduled = requests.post(
+            f"{SLACK_API}/chat.scheduleMessage",
+            headers=headers,
+            json={
+                "channel": channel,
+                "post_at": post_at,
+                "text": "Babosayee access check - this message is cancelled immediately.",
+            },
+            timeout=10,
+        ).json()
+    except (requests.RequestException, ValueError) as error:
+        return {"channel": channel, "can_post": False, "error": str(error)[:200]}
+
+    if not scheduled.get("ok"):
+        return {"channel": channel, "can_post": False, "error": scheduled.get("error")}
+
+    result: Dict[str, Any] = {"channel": channel, "can_post": True}
+
+    message_id = scheduled.get("scheduled_message_id")
+    scheduled_channel = scheduled.get("channel", channel)
+    try:
+        deleted = requests.post(
+            f"{SLACK_API}/chat.deleteScheduledMessage",
+            headers=headers,
+            json={"channel": scheduled_channel, "scheduled_message_id": message_id},
+            timeout=10,
+        ).json()
+        if not deleted.get("ok"):
+            result["cleanup_failed"] = deleted.get("error")
+            logger.error(
+                "Scheduled access-check message could not be cancelled | id=%s error=%s",
+                message_id, deleted.get("error"),
+            )
+    except (requests.RequestException, ValueError) as error:
+        result["cleanup_failed"] = str(error)[:200]
+        logger.error("Could not cancel access-check message | id=%s error=%s", message_id, error)
+
+    return result

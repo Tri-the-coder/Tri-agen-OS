@@ -195,3 +195,52 @@ def test_token_reveals_slack_workspace_details(monkeypatch):
     body = client.get("/health?token=s3cret-health").get_json()
     assert body["slack"]["team"] == "Babosayee"
     assert body["slack"]["bot_user_id"] == "U0BOT"
+
+
+# --- lead channel access probe --------------------------------------------------
+
+def test_lead_channel_probe_reports_access(monkeypatch):
+    import app.services.slack as slack_svc
+
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(url)
+        if "scheduleMessage" in url:
+            return FakeResponse(200, {"ok": True, "scheduled_message_id": "Q1", "channel": "C1"})
+        return FakeResponse(200, {"ok": True})
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setattr(slack_svc.requests, "post", fake_post)
+
+    result = slack_svc.can_post_to_lead_channel()
+    assert result["can_post"] is True
+    assert any("deleteScheduledMessage" in c for c in calls), "the probe must cancel itself"
+
+
+def test_lead_channel_probe_detects_not_in_channel(monkeypatch):
+    import app.services.slack as slack_svc
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setattr(slack_svc.requests, "post",
+                        lambda *a, **k: FakeResponse(200, {"ok": False, "error": "not_in_channel"}))
+
+    result = slack_svc.can_post_to_lead_channel()
+    assert result["can_post"] is False
+    assert result["error"] == "not_in_channel"
+
+
+def test_lead_channel_probe_flags_failed_cleanup(monkeypatch):
+    import app.services.slack as slack_svc
+
+    def fake_post(url, **kwargs):
+        if "scheduleMessage" in url:
+            return FakeResponse(200, {"ok": True, "scheduled_message_id": "Q1", "channel": "C1"})
+        return FakeResponse(200, {"ok": False, "error": "invalid_scheduled_message_id"})
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setattr(slack_svc.requests, "post", fake_post)
+
+    result = slack_svc.can_post_to_lead_channel()
+    assert result["can_post"] is True
+    assert "cleanup_failed" in result, "a message that could not be cancelled must be surfaced"
