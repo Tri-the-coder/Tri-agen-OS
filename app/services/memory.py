@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 
-from app.db.session import get_db_connection
+from app.db.session import get_db_connection, init_db
 
 
 class MemoryService:
@@ -8,22 +8,15 @@ class MemoryService:
         self._init_table()
 
     def _init_table(self) -> None:
-        with get_db_connection() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS memories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    key TEXT NOT NULL UNIQUE,
-                    value TEXT NOT NULL
-                )
-                """
-            )
-            conn.commit()
+        # The memories table is created with the rest of the schema.
+        init_db()
 
     def remember(self, key: str, value: str) -> None:
         with get_db_connection() as conn:
+            # INSERT OR REPLACE is SQLite-only; delete-then-insert is portable.
+            conn.execute("DELETE FROM memories WHERE key = ?", (key,))
             conn.execute(
-                "INSERT OR REPLACE INTO memories (key, value) VALUES (?, ?)",
+                "INSERT INTO memories (key, value) VALUES (?, ?)",
                 (key, value),
             )
             conn.commit()

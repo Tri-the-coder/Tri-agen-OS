@@ -8,6 +8,10 @@ services:
     envVars:
       - key: PORT
         value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SCHEMA
+        value: tri_buddy
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL

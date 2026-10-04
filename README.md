@@ -86,6 +86,38 @@ Draft a proposal email for <client>   ->  then: Approve <id>
 
 Anything else goes to Hermes.
 
+## Storage
+
+SQLite by default. Set `DATABASE_URL` to a Supabase (or any Postgres) connection string
+and the same code runs on Postgres instead - Supabase *is* Postgres, so there is nothing
+Supabase-specific here.
+
+**This app never shares a schema with anything else.** Its table names - `leads`, `tasks`,
+`reports`, `memories` - are exactly what a business product would also use, so every table
+lives in `DB_SCHEMA` (default `tri_buddy`) and `search_path` is pinned to it on each
+connection. Pointing `DATABASE_URL` at a database that also holds the Babosayee product
+is therefore safe: nothing unqualified can reach another schema's tables.
+
+Using `public` is refused outright unless `DB_ALLOW_PUBLIC_SCHEMA=1`, and the schema name
+is validated against an identifier pattern before it is ever interpolated into SQL.
+
+On the free Supabase plan a project pauses after about 7 days of low activity, which this
+bot will not hit - it queries on every message plus the daily SEO run. Free projects get
+500 MB, far more than this needs.
+
+Switching backends does not copy data. Nothing currently lives long enough on Render's
+ephemeral disk for that to matter, but a Postgres switch does start empty.
+
+Tests run on SQLite. To exercise the Postgres path, point `TEST_DATABASE_URL` at a
+throwaway database:
+
+```bash
+TEST_DATABASE_URL=postgresql:///some_scratch_db python -m pytest tests/test_postgres.py
+```
+
+Those tests create and drop their own `tri_buddy_test` schema and assert that nothing
+lands in `public`.
+
 ## Slack setup
 
 The bot serves Slack from the same Flask process as Telegram. HTTP Events API, not Socket
