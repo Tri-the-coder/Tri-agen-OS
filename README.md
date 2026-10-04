@@ -119,7 +119,7 @@ A plain DM or an `@mention` goes straight to Hermes.
 Leads are stored in the `leads` table and announced in `SLACK_LEAD_CHANNEL`
 (default `lead_hub`). Score is out of 100 and computed in code, not by the model:
 business +30, asked about pricing or trial +25, shared a phone number +25, clear buying
-intent +20. At 65 or above a lead is saved automatically.
+intent +20. At 55 or above a lead is saved automatically.
 
 A chat completion cannot save anything by itself, so capture runs as a separate step
 after the reply has been sent: a keyword and phone-number pre-filter decides whether the

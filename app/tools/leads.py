@@ -11,7 +11,9 @@ SCORE_ASKED_PRICING = 25
 SCORE_SHARED_PHONE = 25
 SCORE_BUYING_INTENT = 20
 
-AUTO_SAVE_THRESHOLD = 65
+# 55 rather than 65: business + phone scores exactly 55, and someone who hands over
+# a phone number is about as qualified as a lead gets.
+AUTO_SAVE_THRESHOLD = 55
 
 # Bangladeshi mobile numbers: 01XXXXXXXXX, optionally +88 prefixed.
 PHONE_RE = re.compile(r"(?:\+?88)?0?1[3-9]\d{8}")
