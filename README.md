@@ -101,6 +101,13 @@ is therefore safe: nothing unqualified can reach another schema's tables.
 Using `public` is refused outright unless `DB_ALLOW_PUBLIC_SCHEMA=1`, and the schema name
 is validated against an identifier pattern before it is ever interpolated into SQL.
 
+**Use the session pooler or a direct connection, not the transaction pooler.** In Supabase
+that means the port 5432 string rather than 6543. `search_path` is passed as a connection
+startup option so it survives pooling, but transaction-mode pooling can still reassign
+statements between backend sessions, and anything that drops `search_path` would let
+unqualified table names resolve against `public` - the exact collision the schema is there
+to prevent.
+
 On the free Supabase plan a project pauses after about 7 days of low activity, which this
 bot will not hit - it queries on every message plus the daily SEO run. Free projects get
 500 MB, far more than this needs.

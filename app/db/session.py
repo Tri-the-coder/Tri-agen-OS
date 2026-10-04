@@ -100,12 +100,15 @@ def get_db_connection():
     if using_postgres():
         import psycopg
 
-        conn = psycopg.connect(database_url())
         schema = schema_name()
+        # search_path is set as a startup option rather than a SET statement. A SET is
+        # session state, and a transaction-mode pooler can hand the next statement to a
+        # different backend session, which would silently drop it and let unqualified
+        # names resolve against public. A startup option is applied per connection.
+        conn = psycopg.connect(database_url(), options=f"-c search_path={schema}")
         with conn.cursor() as cursor:
+            # Explicitly named, so it works even before search_path resolves.
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-            # search_path pins every unqualified name to our schema, so no statement
-            # can reach another application's tables by accident.
             cursor.execute(f'SET search_path TO "{schema}"')
         conn.commit()
         return _PgConnection(conn)
