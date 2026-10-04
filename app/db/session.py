@@ -33,4 +33,18 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slack_user_id TEXT NOT NULL,
+                user_name TEXT,
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reports_user ON reports (slack_user_id)"
+        )
         conn.commit()

@@ -10,6 +10,8 @@ MAX_MEMORY_ITEMS = 40
 # in full, so values get real room. The block total is what keeps the prompt bounded.
 MAX_MEMORY_VALUE_CHARS = 2000
 MAX_MEMORY_BLOCK_CHARS = 8000
+MAX_REPORT_ITEMS = 20
+MAX_REPORT_CHARS = 400
 
 BASE_PROMPT = """You are Hermes, the internal second brain for the small team building
 Babosayee, a SaaS product. You work for that team, not for their customers. Nobody outside
@@ -141,9 +143,52 @@ def _format_memories(memories: List[Dict[str, Any]]) -> str:
     )
 
 
-def build_prompt(memories: Optional[List[Dict[str, Any]]] = None) -> str:
-    """Build the system prompt, folding in whatever the team has taught the bot."""
-    return BASE_PROMPT + _format_memories(memories or [])
+def _format_reports(reports: List[Dict[str, Any]]) -> str:
+    """Daily reports from Slack, so the bot can answer "what is X working on?"."""
+    if not reports:
+        return (
+            "\nTEAM STATUS\n"
+            "No daily reports submitted yet. If someone asks about team progress, say so\n"
+            "plainly and tell them to submit one with /daily <what they did>.\n"
+        )
+
+    lines = []
+    for item in reports[:MAX_REPORT_ITEMS]:
+        who = str(item.get("user_name") or item.get("slack_user_id") or "unknown").strip()
+        text = str(item.get("text", "")).strip()
+        when = str(item.get("created_at", "")).strip()
+        if not text:
+            continue
+        if len(text) > MAX_REPORT_CHARS:
+            text = text[:MAX_REPORT_CHARS].rstrip() + "..."
+        lines.append(f"- {who} ({when}): {text}")
+
+    if not lines:
+        return ""
+
+    body = "\n".join(lines)
+    return (
+        "\nTEAM STATUS\n"
+        "The most recent daily report from each teammate. This is the only thing you know\n"
+        "about their work. If someone asks about a person or a period not covered here,\n"
+        "say so instead of guessing, and never invent progress, blockers or percentages.\n"
+        f"{body}\n"
+    )
+
+
+def build_prompt(
+    memories: Optional[List[Dict[str, Any]]] = None,
+    reports: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """Build the system prompt from what the team taught the bot and reported.
+
+    `reports` is passed only on the Slack path, so a Telegram user is never told
+    about slash commands that do not exist there.
+    """
+    prompt = BASE_PROMPT + _format_memories(memories or [])
+    if reports is not None:
+        prompt += _format_reports(reports)
+    return prompt
 
 
 HERMES_PROMPT = build_prompt()

@@ -135,7 +135,9 @@ def create_app(testing: bool = False) -> Flask:
         return jsonify({"status": "ok", "service": "tri-buddy-agent"})
 
     from app.api.webhook import webhook_bp
+    from app.api.slack import slack_bp
     app.register_blueprint(webhook_bp)
+    app.register_blueprint(slack_bp)
     app.register_blueprint(health_bp)
     return app
 
