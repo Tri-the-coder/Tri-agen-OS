@@ -93,9 +93,27 @@ def test_build_prompt_still_works_with_no_argument():
 
 def test_prompt_forbids_inventing_metrics():
     prompt = build_prompt()
-    assert "no internet access" in prompt
-    assert "NEVER state a keyword volume" in prompt
-    assert "Never claim you checked, visited, crawled or monitored anything." in prompt
+    assert "zero web access" in prompt
+    assert "Never invent, estimate, assume or hallucinate any metric" in prompt
+    assert "Never claim you checked, visited, crawled, measured or monitored anything." in prompt
+
+
+def test_prompt_specifies_the_exact_missing_data_phrase():
+    assert '"Not provided in the data you shared."' in build_prompt()
+
+
+def test_prompt_defines_the_response_structure():
+    prompt = build_prompt()
+    for heading in ("What I can see from your data", "Key observations / analysis",
+                    "Recommendations or drafted output",
+                    "What additional data would make this stronger"):
+        assert heading in prompt
+
+
+def test_prompt_requires_separating_fact_from_interpretation():
+    prompt = build_prompt()
+    assert "Separate fact from interpretation" in prompt
+    assert "never present reasoning" in prompt
 
 
 def test_prompt_forbids_inventing_product_facts():
@@ -107,8 +125,8 @@ def test_prompt_forbids_inventing_product_facts():
 
 def test_prompt_covers_the_second_brain_jobs():
     prompt = build_prompt()
-    for job in ("Lead generation", "Social media and branding", "PR review", "SEO",
-                "Analytics interpretation", "Customer support"):
+    for job in ("lead generation", "social media and branding", "PR review", "SEO",
+                "interpreting analytics", "customer support"):
         assert job in prompt
 
 

@@ -13,7 +13,7 @@ services:
       - key: OPENROUTER_MODEL
         value: nvidia/nemotron-3-ultra-550b-a55b:free
       - key: OPENROUTER_MODELS
-        value: nvidia/nemotron-3-ultra-550b-a55b:free,poolside/laguna-s-2.1:free,openrouter/free
+        value: nvidia/nemotron-3-ultra-550b-a55b:free,qwen/qwen3.8-27b:free,apodex/apodex-1.1-mini:free
       - key: OPENROUTER_TIMEOUT
         value: 25
       - key: HEALTH_TOKEN

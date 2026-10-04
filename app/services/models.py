@@ -8,15 +8,18 @@ logger = logging.getLogger(__name__)
 
 # Free-tier chain. Every entry must be a ":free" (or inherently free) OpenRouter model
 # that supports tool calling, so the agent never bills the account.
+# thinkingmachines/inkling:free is deliberately absent: OpenRouter gates it behind
+# "agentic harnesses" and returns a permanent 403 to a plain webhook like this one,
+# so including it would only add a wasted round-trip to every fallback.
 DEFAULT_MODEL_CHAIN: List[str] = [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "poolside/laguna-s-2.1:free",
-    "openrouter/free",
+    "qwen/qwen3.8-27b:free",
+    "apodex/apodex-1.1-mini:free",
 ]
 
 # Statuses that mean "this model is unavailable right now, try the next one"
 # rather than "the request itself is malformed".
-FALLBACK_STATUSES = {402, 408, 429, 500, 502, 503, 504}
+FALLBACK_STATUSES = {402, 403, 408, 429, 500, 502, 503, 504}
 
 
 class AllModelsUnavailable(RuntimeError):
