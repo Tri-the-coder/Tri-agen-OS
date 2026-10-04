@@ -110,8 +110,10 @@ def slash_command():
     text = (form.get("text") or "").strip()
     user_id = form.get("user_id", "")
     response_url = form.get("response_url", "")
-    # Slack sends the display name with the command, which saves a users.info call.
-    name = form.get("user_name") or slack.user_name(user_id)
+    # Slack's user_name field is the handle ("rafi.a"); users.info gives the display
+    # name people actually recognise. Cached for 6 hours, so this is ~1 call per person
+    # per session, and it falls back to the handle if Slack is unreachable.
+    name = slack.user_name(user_id) or form.get("user_name") or user_id
 
     orchestrator = current_app.config.get("agent_orchestrator")
 

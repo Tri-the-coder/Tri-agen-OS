@@ -14,7 +14,11 @@ SLACK_API = "https://slack.com/api"
 # Slack signs with v0. Anything older than this is a replay attempt.
 MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5
 
-_user_name_cache: Dict[str, str] = {}
+# user_id -> (name, fetched_at). Display names change, so entries expire rather than
+# living for the life of the process.
+USER_CACHE_TTL_SECONDS = 60 * 60 * 6
+MAX_CACHED_USERS = 500
+_user_name_cache: Dict[str, Any] = {}
 
 
 def signing_secret() -> str:
@@ -89,14 +93,44 @@ def respond(response_url: str, text: str, in_channel: bool = False) -> None:
         logger.warning("Slash response_url delivery failed | error=%s", error)
 
 
+def _cached_name(slack_user_id: str) -> Optional[str]:
+    entry = _user_name_cache.get(slack_user_id)
+    if not entry:
+        return None
+    name, fetched_at = entry
+    if time.time() - fetched_at > USER_CACHE_TTL_SECONDS:
+        _user_name_cache.pop(slack_user_id, None)
+        return None
+    return name
+
+
+def _remember_name(slack_user_id: str, name: str) -> None:
+    # Bounded so a busy workspace cannot grow this without limit.
+    if len(_user_name_cache) >= MAX_CACHED_USERS:
+        oldest = min(_user_name_cache, key=lambda k: _user_name_cache[k][1])
+        _user_name_cache.pop(oldest, None)
+    _user_name_cache[slack_user_id] = (name, time.time())
+
+
 def user_name(slack_user_id: str) -> Optional[str]:
-    """Resolve U07ABC123 to a human name, cached for the life of the process."""
+    """Resolve U07ABC123 to a display name, cached with a TTL.
+
+    Falls back to the raw id rather than None, so a caller always has something
+    printable even when Slack is unreachable or the token is missing.
+    """
     if not slack_user_id:
         return None
-    if slack_user_id in _user_name_cache:
-        return _user_name_cache[slack_user_id]
+
+    # Bot ids are not users; users.info would just fail on them.
+    if slack_user_id.startswith("B"):
+        return slack_user_id
+
+    cached = _cached_name(slack_user_id)
+    if cached:
+        return cached
+
     if not bot_token():
-        return None
+        return slack_user_id
 
     try:
         response = requests.get(
@@ -106,12 +140,13 @@ def user_name(slack_user_id: str) -> Optional[str]:
             timeout=10,
         )
         data = response.json()
-    except requests.RequestException as error:
-        logger.warning("users.info failed | error=%s", error)
-        return None
+    except (requests.RequestException, ValueError) as error:
+        logger.warning("users.info failed | user=%s error=%s", slack_user_id, error)
+        return slack_user_id
 
     if not data.get("ok"):
-        return None
+        logger.warning("users.info rejected | user=%s error=%s", slack_user_id, data.get("error"))
+        return slack_user_id
 
     profile = data.get("user", {})
     name = (
@@ -120,8 +155,10 @@ def user_name(slack_user_id: str) -> Optional[str]:
         or profile.get("real_name")
         or profile.get("name")
     )
-    if name:
-        _user_name_cache[slack_user_id] = name
+    if not name:
+        return slack_user_id
+
+    _remember_name(slack_user_id, name)
     return name
 
 
