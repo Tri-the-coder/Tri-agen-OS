@@ -11,10 +11,11 @@ def get_db_connection() -> sqlite3.Connection:
 
 def init_db() -> None:
     with get_db_connection() as conn:
-        conn.execute("DROP TABLE IF EXISTS tasks")
+        # CREATE TABLE IF NOT EXISTS, never DROP: init_db() runs on every app start,
+        # so dropping here wiped every task and lead on each restart and deploy.
         conn.execute(
             """
-            CREATE TABLE tasks (
+            CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
@@ -22,10 +23,9 @@ def init_db() -> None:
             )
             """
         )
-        conn.execute("DROP TABLE IF EXISTS leads")
         conn.execute(
             """
-            CREATE TABLE leads (
+            CREATE TABLE IF NOT EXISTS leads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 stage TEXT NOT NULL DEFAULT 'new',

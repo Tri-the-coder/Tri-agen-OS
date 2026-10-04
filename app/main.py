@@ -28,6 +28,18 @@ RATE_LIMIT_REPLY = (
 GENERIC_ERROR_REPLY = "I ran into an issue and could not process that request right now."
 
 
+def _stored_facts(orchestrator) -> list:
+    """Facts the team saved via "Remember that ...", folded into the system prompt.
+
+    A memory lookup must never cost us the reply, so failures degrade to no facts.
+    """
+    try:
+        return orchestrator.memory.search("")
+    except Exception as error:  # noqa: BLE001
+        logger.warning("Could not load stored facts | error=%s", error)
+        return []
+
+
 def telegram_webhook():
     payload = request.get_json(silent=True) or {}
 
@@ -74,7 +86,7 @@ def telegram_webhook():
         logger.info("Command handled | chat_id=%s reply=%s", chat_id, ai_text)
     else:
         try:
-            result = complete(build_prompt(), prompt_content)
+            result = complete(build_prompt(_stored_facts(orchestrator)), prompt_content)
             ai_text = result["content"]
             logger.info("Hermes reply | chat_id=%s model=%s", chat_id, result["model"])
 
