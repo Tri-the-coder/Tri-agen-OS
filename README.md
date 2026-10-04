@@ -109,8 +109,30 @@ instance is not.
 | `/status @someone` | that person's last 5 reports |
 | `/team` | most recent report from each teammate |
 | `/ask <question>` | ask Hermes, with team reports and stored facts in context |
+| `/lead Name - Business - Phone - Notes` | save a lead and post it to the lead channel |
+| `/leads` | the 10 most recent leads |
 
 A plain DM or an `@mention` goes straight to Hermes.
+
+### Lead capture
+
+Leads are stored in the `leads` table and announced in `SLACK_LEAD_CHANNEL`
+(default `lead_hub`). Score is out of 100 and computed in code, not by the model:
+business +30, asked about pricing or trial +25, shared a phone number +25, clear buying
+intent +20. At 65 or above a lead is saved automatically.
+
+A chat completion cannot save anything by itself, so capture runs as a separate step
+after the reply has been sent: a keyword and phone-number pre-filter decides whether the
+message is worth a second model call, that call extracts the fields as JSON, and the score
+is computed from them. The phone number is always taken from the message by regex rather
+than from the model, so a hallucinated number cannot be stored. Duplicate phone numbers
+and names are skipped, and a Slack posting failure never loses the lead.
+
+**The bot must be a member of the lead channel.** With only `chat:write` it cannot post to
+a channel it has not joined; Slack replies `not_in_channel` and the failure is otherwise
+silent. Either invite it (`/invite @Babosayee Second brain` in the channel) or add the
+`chat:write.public` scope. Setting `SLACK_LEAD_CHANNEL` to the channel ID (`C0...`) avoids
+name-resolution problems.
 
 ### Bot token scopes
 

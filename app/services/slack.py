@@ -236,3 +236,47 @@ def resolve_mention(token: str) -> Optional[str]:
         inner = token[2:-1]
         return inner.split("|")[0] or None
     return None
+
+
+def lead_channel() -> str:
+    """Channel for new leads. An ID (C0…) is more reliable than a name."""
+    return os.getenv("SLACK_LEAD_CHANNEL", "lead_hub").strip().lstrip("#")
+
+
+def format_lead(lead: Dict[str, Any]) -> str:
+    return (
+        "🚀 *New Lead Captured*\n\n"
+        f"• *Name:* {lead.get('name') or 'Not provided'}\n"
+        f"• *Phone:* {lead.get('phone') or 'Not provided'}\n"
+        f"• *Business Type:* {lead.get('business_type') or 'Not specified'}\n"
+        f"• *Source:* {lead.get('source') or 'unknown'}\n"
+        f"• *Score:* {lead.get('score', 0)}/100\n"
+        f"• *Notes:* {lead.get('notes') or '-'}\n"
+        "• *Status:* New\n"
+        f"• *Lead ID:* `{lead.get('lead_ref') or lead.get('id')}`"
+    )
+
+
+def post_lead(lead: Dict[str, Any]) -> Dict[str, Any]:
+    """Announce a lead in the lead channel.
+
+    With only chat:write the bot must be a member of that channel; Slack answers
+    not_in_channel otherwise, which is logged loudly because it is silent failure
+    from the user's side.
+    """
+    result = post_message(lead_channel(), format_lead(lead))
+    if not result.get("ok"):
+        error = result.get("error")
+        if error == "not_in_channel":
+            logger.error(
+                "Cannot post lead: the bot is not in #%s. Invite it with /invite @<bot>, "
+                "or add the chat:write.public scope.",
+                lead_channel(),
+            )
+        elif error == "channel_not_found":
+            logger.error(
+                "Cannot post lead: channel #%s not found. Set SLACK_LEAD_CHANNEL to the "
+                "channel ID (C0...) rather than the name.",
+                lead_channel(),
+            )
+    return result

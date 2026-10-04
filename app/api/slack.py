@@ -7,6 +7,8 @@ from flask import Blueprint, current_app, jsonify, make_response, request
 from app.agent.prompt import build_prompt
 from app.services import slack
 from app.services.models import AllModelsUnavailable, complete
+from app.tools.lead_capture import extract_lead, should_auto_save
+from app.tools.leads import create_lead, lead_exists, parse_lead_command, recent_leads, score_lead
 from app.tools.reports import add_report, latest_per_person, reports_for_user
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,66 @@ def _handle_ask(orchestrator, question: str, response_url: str) -> None:
     slack.respond(response_url, _ask_hermes(orchestrator, question))
 
 
+def _handle_lead(text: str, response_url: str) -> None:
+    parsed = parse_lead_command(text)
+    parsed["has_business"] = bool(parsed.get("business_type"))
+    parsed["buying_intent"] = True  # an explicit /lead is intent by definition
+    score = score_lead(parsed)
+
+    lead = create_lead(
+        name=parsed["name"], phone=parsed["phone"],
+        business_type=parsed["business_type"], notes=parsed["notes"],
+        score=score, source="slack",
+    )
+    posted = slack.post_lead(lead)
+
+    confirmation = f"Lead saved as `{lead['lead_ref']}` ({lead['score']}/100)."
+    if posted.get("ok"):
+        confirmation += f" Posted to #{slack.lead_channel()}."
+    else:
+        confirmation += (
+            f" Could not post to #{slack.lead_channel()}: `{posted.get('error')}`. "
+            "The lead is saved."
+        )
+    slack.respond(response_url, confirmation)
+
+
+def _handle_leads(response_url: str) -> None:
+    leads = recent_leads(10)
+    if not leads:
+        slack.respond(response_url, "No leads captured yet.")
+        return
+    body = "\n".join(
+        f"• `{l['lead_ref']}` {l['name']} | {l['business_type'] or '-'} | "
+        f"{l['phone'] or 'no phone'} | {l['score']}/100"
+        for l in leads
+    )
+    slack.respond(response_url, f"*Recent leads*\n{body}")
+
+
+def capture_lead_from(text: str, source: str) -> Optional[Dict[str, Any]]:
+    """Extract and store a lead if the message carries one. Never raises."""
+    try:
+        lead = extract_lead(text)
+        if not should_auto_save(lead):
+            return None
+        if lead_exists(lead.get("phone"), lead.get("name") or ""):
+            logger.info("Lead already captured, skipping | phone=%s", lead.get("phone"))
+            return None
+
+        saved = create_lead(
+            name=lead.get("name") or "Unknown", phone=lead.get("phone"),
+            business_type=lead.get("business_type"), notes=lead.get("notes", ""),
+            score=lead["score"], source=source,
+        )
+        slack.post_lead(saved)
+        logger.info("Lead auto-captured | ref=%s score=%s", saved["lead_ref"], saved["score"])
+        return saved
+    except Exception as error:  # noqa: BLE001 - capture must never break the conversation
+        logger.warning("Lead auto-capture failed | error=%s", error)
+        return None
+
+
 @slack_bp.post("/slack/commands")
 def slash_command():
     if not _verified():
@@ -129,6 +191,14 @@ def slash_command():
     elif command == "/team":
         _run_in_background(_handle_team, response_url)
 
+    elif command == "/lead":
+        if not text:
+            return jsonify({"text": "Usage: `/lead Name - Business - Phone - Notes`"}), 200
+        _run_in_background(_handle_lead, text, response_url)
+
+    elif command == "/leads":
+        _run_in_background(_handle_leads, response_url)
+
     elif command == "/ask":
         if not text:
             return jsonify({"text": "Usage: `/ask your question`"}), 200
@@ -144,7 +214,9 @@ def slash_command():
 
 
 def _handle_event_message(orchestrator, channel: str, question: str) -> None:
+    # Answer first: lead capture must never delay the reply.
     slack.post_message(channel, _ask_hermes(orchestrator, question))
+    capture_lead_from(question, "slack")
 
 
 @slack_bp.post("/slack/events")

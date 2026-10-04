@@ -47,4 +47,25 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_reports_user ON reports (slack_user_id)"
         )
+        _migrate_leads(conn)
         conn.commit()
+
+
+def _migrate_leads(conn) -> None:
+    """Widen the original leads table in place.
+
+    It shipped as (id, name, stage, notes); lead capture needs contact details,
+    a score and provenance. ALTER TABLE ADD COLUMN keeps existing rows.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(leads)").fetchall()}
+    columns = {
+        "lead_ref": "TEXT",
+        "phone": "TEXT",
+        "business_type": "TEXT",
+        "score": "INTEGER NOT NULL DEFAULT 0",
+        "source": "TEXT",
+        "created_at": "TEXT",
+    }
+    for column, ddl in columns.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE leads ADD COLUMN {column} {ddl}")

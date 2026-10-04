@@ -20,6 +20,8 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: SLACK_LEAD_CHANNEL
+        value: lead_hub
       - key: SLACK_SIGNING_SECRET
         sync: false
       - key: SLACK_BOT_TOKEN

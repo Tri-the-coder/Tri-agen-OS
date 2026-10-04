@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from typing import Any, Dict
 
 import requests
@@ -115,6 +116,15 @@ def telegram_webhook():
         if current_app.config["TESTING"]:
             return jsonify({"ok": False, "message": str(error)}), 500
         return jsonify({"status": "dispatch_error", "message": str(error)}), 500
+
+    # Lead capture runs after the reply is delivered, on its own thread, so an extra
+    # model call never delays the answer or risks Telegram's webhook timeout.
+    if not current_app.config["TESTING"]:
+        from app.api.slack import capture_lead_from
+
+        threading.Thread(
+            target=capture_lead_from, args=(prompt_content, "telegram"), daemon=True
+        ).start()
 
     if current_app.config["TESTING"]:
         return jsonify({"ok": True, "message": ai_text}), 200
