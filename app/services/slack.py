@@ -14,11 +14,72 @@ SLACK_API = "https://slack.com/api"
 # Slack signs with v0. Anything older than this is a replay attempt.
 MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5
 
+try:  # redis is optional - the cache works without it
+    import redis as redis_lib
+except ImportError:  # pragma: no cover - exercised by deployments without the package
+    redis_lib = None
+
 # user_id -> (name, fetched_at). Display names change, so entries expire rather than
 # living for the life of the process.
 USER_CACHE_TTL_SECONDS = 60 * 60 * 6
+REDIS_USER_TTL_SECONDS = 60 * 60 * 24 * 7
 MAX_CACHED_USERS = 500
 _user_name_cache: Dict[str, Any] = {}
+
+_redis_client = None
+_redis_resolved = False
+
+
+def redis_client():
+    """Connect lazily, once, and never let Redis break a request.
+
+    REDIS_URL unset, the package missing, or the server unreachable all mean the
+    same thing here: fall back to the in-process cache.
+    """
+    global _redis_client, _redis_resolved
+    if _redis_resolved:
+        return _redis_client
+
+    _redis_resolved = True
+    url = os.getenv("REDIS_URL", "").strip()
+    if not url or redis_lib is None:
+        return None
+
+    try:
+        client = redis_lib.from_url(
+            url,
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
+        )
+        client.ping()
+        _redis_client = client
+        logger.info("Redis cache connected")
+    except Exception as error:  # noqa: BLE001 - any redis failure means "no cache"
+        logger.warning("Redis unavailable, using in-memory cache | error=%s", error)
+        _redis_client = None
+    return _redis_client
+
+
+def _redis_get(key: str) -> Optional[str]:
+    client = redis_client()
+    if not client:
+        return None
+    try:
+        return client.get(key)
+    except Exception as error:  # noqa: BLE001
+        logger.warning("Redis read failed | key=%s error=%s", key, error)
+        return None
+
+
+def _redis_set(key: str, value: str, ttl: int) -> None:
+    client = redis_client()
+    if not client:
+        return
+    try:
+        client.setex(key, ttl, value)
+    except Exception as error:  # noqa: BLE001
+        logger.warning("Redis write failed | key=%s error=%s", key, error)
 
 
 def signing_secret() -> str:
@@ -129,6 +190,11 @@ def user_name(slack_user_id: str) -> Optional[str]:
     if cached:
         return cached
 
+    shared = _redis_get(f"slack:user:{slack_user_id}")
+    if shared:
+        _remember_name(slack_user_id, shared)
+        return shared
+
     if not bot_token():
         return slack_user_id
 
@@ -159,6 +225,7 @@ def user_name(slack_user_id: str) -> Optional[str]:
         return slack_user_id
 
     _remember_name(slack_user_id, name)
+    _redis_set(f"slack:user:{slack_user_id}", name, REDIS_USER_TTL_SECONDS)
     return name
 
 
