@@ -143,3 +143,55 @@ def test_model_probe_reports_rate_limit(monkeypatch):
     probe = client.get("/health?token=s3cret&probe=model").get_json()["probe"]
     assert probe["ok"] is False
     assert probe["rate_limited"] is True
+
+
+# --- slack token check ----------------------------------------------------------
+
+def _slack_client(monkeypatch, auth_payload, *, token="xoxb-test", signing="s3cret"):
+    import app.api.health as health_mod
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test")
+    monkeypatch.setenv("HEALTH_TOKEN", "s3cret-health")
+    monkeypatch.setenv("SLACK_BOT_TOKEN", token)
+    monkeypatch.setenv("SLACK_SIGNING_SECRET", signing)
+    monkeypatch.setattr(health_mod.requests, "get", lambda *a, **k: FakeResponse(200, KEY_PAYLOAD))
+    monkeypatch.setattr(health_mod.requests, "post", lambda *a, **k: FakeResponse(200, auth_payload))
+    return create_app(testing=True).test_client()
+
+
+def test_valid_slack_token_reported(monkeypatch):
+    client = _slack_client(monkeypatch, {"ok": True, "team": "Babosayee",
+                                         "user_id": "U0BOT", "user": "secondbrain"})
+    body = client.get("/health").get_json()
+    assert body["slack"]["token_valid"] is True
+    assert body["slack"]["signing_secret_set"] is True
+
+
+def test_rotated_or_bad_slack_token_reported(monkeypatch):
+    client = _slack_client(monkeypatch, {"ok": False, "error": "invalid_auth"})
+    body = client.get("/health").get_json()
+    assert body["slack"]["token_valid"] is False
+    assert body["slack"]["error"] == "invalid_auth"
+
+
+def test_missing_slack_token_reported(monkeypatch):
+    client = _slack_client(monkeypatch, {"ok": True}, token="")
+    body = client.get("/health").get_json()
+    assert body["slack"]["configured"] is False
+
+
+def test_public_health_hides_slack_workspace_details(monkeypatch):
+    client = _slack_client(monkeypatch, {"ok": True, "team": "Babosayee",
+                                         "user_id": "U0BOT", "user": "secondbrain"})
+    body = client.get("/health").get_json()
+    assert "team" not in body["slack"]
+    assert "bot_user_id" not in body["slack"]
+    assert "Babosayee" not in str(body)
+
+
+def test_token_reveals_slack_workspace_details(monkeypatch):
+    client = _slack_client(monkeypatch, {"ok": True, "team": "Babosayee",
+                                         "user_id": "U0BOT", "user": "secondbrain"})
+    body = client.get("/health?token=s3cret-health").get_json()
+    assert body["slack"]["team"] == "Babosayee"
+    assert body["slack"]["bot_user_id"] == "U0BOT"

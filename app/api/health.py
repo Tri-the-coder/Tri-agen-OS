@@ -7,6 +7,7 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from app.agent.prompt import build_prompt
+from app.services import slack
 from app.services.models import (
     AllModelsUnavailable,
     complete,
@@ -83,6 +84,44 @@ def _check_openrouter(detailed: bool) -> Dict[str, Any]:
     return result
 
 
+def _check_slack(detailed: bool) -> Dict[str, Any]:
+    """Validate the Slack bot token with auth.test.
+
+    auth.test is free, read-only and has no side effects, so it is safe on every
+    health check. It is the only way to tell a good token from a rotated one
+    without posting a message into somebody's workspace.
+    """
+    signing = bool(slack.signing_secret())
+    token = slack.bot_token()
+
+    if not token:
+        return {"configured": False, "signing_secret_set": signing,
+                "error": "SLACK_BOT_TOKEN is not set"}
+
+    try:
+        response = requests.post(
+            "https://slack.com/api/auth.test",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        data = response.json()
+    except (requests.RequestException, ValueError) as error:
+        return {"configured": True, "signing_secret_set": signing,
+                "token_valid": False, "error": str(error)[:200]}
+
+    if not data.get("ok"):
+        return {"configured": True, "signing_secret_set": signing,
+                "token_valid": False, "error": data.get("error", "unknown")}
+
+    result: Dict[str, Any] = {"configured": True, "signing_secret_set": signing,
+                              "token_valid": True}
+    if detailed:
+        result["team"] = data.get("team")
+        result["bot_user_id"] = data.get("user_id")
+        result["bot_name"] = data.get("user")
+    return result
+
+
 @health_bp.get("/health")
 def health():
     """Liveness plus OpenRouter configuration status.
@@ -106,6 +145,7 @@ def health():
         "service": "tri-buddy-agent",
         "openrouter": openrouter,
         "models": models,
+        "slack": _check_slack(detailed),
         "detail": "full" if detailed else "public",
     }
 
