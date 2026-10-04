@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import sqlite3
@@ -130,7 +131,48 @@ def table_columns(conn, table: str) -> Set[str]:
 
 # --- schema ---------------------------------------------------------------------
 
+_last_init_error: Optional[str] = None
+
+
+def last_init_error() -> Optional[str]:
+    return _last_init_error
+
+
+def db_status() -> dict:
+    """Backend, schema and whether a connection actually works."""
+    status = {
+        "backend": "postgres" if using_postgres() else "sqlite",
+        "schema": schema_name() if using_postgres() else None,
+    }
+    try:
+        with get_db_connection() as conn:
+            conn.execute("SELECT 1").fetchone()
+        status["connected"] = True
+    except Exception as error:  # noqa: BLE001
+        status["connected"] = False
+        status["error"] = str(error)[:200]
+    if _last_init_error:
+        status["init_error"] = _last_init_error
+    return status
+
+
 def init_db() -> None:
+    """Create the schema. Never fatal: a bad DATABASE_URL must not stop the app
+    from booting, because a service that will not start cannot be diagnosed."""
+    global _last_init_error
+    try:
+        _init_db()
+        _last_init_error = None
+    except Exception as error:  # noqa: BLE001
+        _last_init_error = str(error)[:300]
+        logging.getLogger(__name__).error(
+            "Database init failed; the app will start but storage is unavailable | "
+            "backend=%s error=%s",
+            "postgres" if using_postgres() else "sqlite", error,
+        )
+
+
+def _init_db() -> None:
     with get_db_connection() as conn:
         conn.execute(
             """

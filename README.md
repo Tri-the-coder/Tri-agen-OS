@@ -115,6 +115,11 @@ bot will not hit - it queries on every message plus the daily SEO run. Free proj
 Switching backends does not copy data. Nothing currently lives long enough on Render's
 ephemeral disk for that to matter, but a Postgres switch does start empty.
 
+A failed database init does not stop the app. A wrong `DATABASE_URL` would otherwise
+take the whole service down at boot - including `/health`, leaving no way to see why - so
+the error is logged, `/health` reports `database.connected: false` with the reason, and
+`status` becomes `degraded`.
+
 Tests run on SQLite. To exercise the Postgres path, point `TEST_DATABASE_URL` at a
 throwaway database:
 

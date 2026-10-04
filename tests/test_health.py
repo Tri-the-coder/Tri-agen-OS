@@ -244,3 +244,51 @@ def test_lead_channel_probe_flags_failed_cleanup(monkeypatch):
     result = slack_svc.can_post_to_lead_channel()
     assert result["can_post"] is True
     assert "cleanup_failed" in result, "a message that could not be cancelled must be surfaced"
+
+
+# --- database status ------------------------------------------------------------
+
+def test_healthy_sqlite_is_reported(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    client = _slack_client(monkeypatch, {"ok": True})
+    body = client.get("/health").get_json()
+    assert body["database"]["backend"] == "sqlite"
+    assert body["database"]["connected"] is True
+
+
+def test_unreachable_database_degrades_but_serves(monkeypatch):
+    """A bad DATABASE_URL must still leave /health answerable."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:bad@127.0.0.1:1/none")
+    monkeypatch.setenv("DB_SCHEMA", "tri_buddy")
+    client = _slack_client(monkeypatch, {"ok": True})
+    response = client.get("/health")
+
+    assert response.status_code == 200, "the app must stay diagnosable"
+    body = response.get_json()
+    assert body["database"]["connected"] is False
+    assert body["status"] == "degraded"
+
+
+def test_bad_database_url_does_not_stop_boot(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:bad@127.0.0.1:1/none")
+    monkeypatch.setenv("DB_SCHEMA", "tri_buddy")
+    import app.main as main
+
+    app = main.create_app(testing=True)  # must not raise
+    assert app is not None
+
+
+def test_public_view_hides_the_schema(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    client = _slack_client(monkeypatch, {"ok": True})
+    assert "schema" not in client.get("/health").get_json()["database"]
+
+
+def test_token_view_shows_the_schema(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:bad@127.0.0.1:1/none")
+    monkeypatch.setenv("DB_SCHEMA", "tri_buddy")
+    client = _slack_client(monkeypatch, {"ok": True})
+    body = client.get("/health?token=s3cret-health").get_json()
+    assert body["database"]["schema"] == "tri_buddy"

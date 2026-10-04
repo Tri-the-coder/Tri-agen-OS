@@ -7,6 +7,7 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from app.agent.prompt import build_prompt
+from app.db.session import db_status
 from app.services import slack
 from app.services.models import (
     AllModelsUnavailable,
@@ -122,6 +123,14 @@ def _check_slack(detailed: bool) -> Dict[str, Any]:
     return result
 
 
+def _check_database(detailed: bool) -> Dict[str, Any]:
+    status = db_status()
+    if detailed:
+        return status
+    # Public view: enough to see it is broken, nothing about where it lives.
+    return {"backend": status["backend"], "connected": status.get("connected", False)}
+
+
 @health_bp.get("/health")
 def health():
     """Liveness plus OpenRouter configuration status.
@@ -146,6 +155,7 @@ def health():
         "openrouter": openrouter,
         "models": models,
         "slack": _check_slack(detailed),
+        "database": _check_database(detailed),
         "detail": "full" if detailed else "public",
     }
 
@@ -165,7 +175,11 @@ def health():
                 "failures": error.failures,
             }
 
-    healthy = openrouter.get("reachable") and openrouter.get("key_valid")
+    healthy = (
+        openrouter.get("reachable")
+        and openrouter.get("key_valid")
+        and payload["database"].get("connected")
+    )
     if request.args.get("strict") == "1" and not healthy:
         payload["status"] = "degraded"
         return jsonify(payload), 503
