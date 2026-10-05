@@ -221,6 +221,29 @@ reads as approval. The workflow never fails the PR.
 
 It is a first-pass reviewer on a free model, not a gate.
 
+### Daily traffic report (GA4)
+
+`POST /tasks/ga-report` reads the GA4 Data API and posts to `SLACK_GA_CHANNEL`
+(defaults to the SEO channel). Same `HEALTH_TOKEN`, and `?dry=1` previews without posting.
+The morning workflow calls it right after the SEO check, so both land together.
+
+It reports yesterday's users, sessions, pageviews, average session, bounce rate and
+conversions, the top channels and pages, and live users from the realtime API. Every
+figure comes from the API; nothing is estimated, and a section that fails to load is
+named as missing rather than shown as zero.
+
+Setup:
+
+1. In Google Cloud, create a service account and download its JSON key.
+2. Enable the **Google Analytics Data API** for that project.
+3. In GA4 Admin → Property Access Management, add the service account's email as a
+   **Viewer**.
+4. In Render set `GA4_PROPERTY_ID` (the numeric id, not `G-XXXX`) and
+   `GA4_SERVICE_ACCOUNT_JSON` (the whole key file on one line).
+
+This uses `google-auth` with the REST API rather than `google-analytics-data`, which pulls
+in grpcio and protobuf - a much heavier build for no benefit here.
+
 ### Bot token scopes
 
 `commands`, `chat:write`, `app_mentions:read`, `im:history`, `im:read`, `im:write`,

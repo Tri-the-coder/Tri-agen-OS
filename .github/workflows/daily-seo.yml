@@ -1,4 +1,4 @@
-name: Daily SEO report
+name: Daily SEO and traffic report
 
 # 03:00 UTC is 09:00 in Dhaka (UTC+6). GitHub's scheduler can run a few minutes
 # late, which is fine for a morning report.
@@ -22,5 +22,18 @@ jobs:
             -H "X-Health-Token: $HEALTH_TOKEN")
           echo "HTTP $code"
           cat /tmp/out.json
+          echo
+          test "$code" = "200"
+
+      - name: Trigger the traffic report
+        env:
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
+          SERVICE_URL: ${{ secrets.SERVICE_URL }}
+        run: |
+          code=$(curl -s -o /tmp/ga.json -w '%{http_code}' --max-time 180 \
+            -X POST "$SERVICE_URL/tasks/ga-report" \
+            -H "X-Health-Token: $HEALTH_TOKEN")
+          echo "HTTP $code"
+          cat /tmp/ga.json
           echo
           test "$code" = "200"

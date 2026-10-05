@@ -6,6 +6,7 @@ from typing import Any, Dict
 from flask import Blueprint, jsonify, make_response, request
 
 from app.services import slack
+from app.tools.ga_report import build_daily_report as build_ga_report
 from app.tools.pr_review import format_for_slack, review
 from app.tools.seo_report import build_daily_report
 
@@ -20,6 +21,10 @@ def seo_site_url() -> str:
 
 def seo_channel() -> str:
     return os.getenv("SLACK_SEO_CHANNEL", "babosayee_seo").strip().lstrip("#")
+
+
+def ga_channel() -> str:
+    return os.getenv("SLACK_GA_CHANNEL", seo_channel()).strip().lstrip("#")
 
 
 def dev_channel() -> str:
@@ -104,4 +109,30 @@ def pr_review():
         payload["slack_error"] = posted.get("error")
         logger.error("PR review could not be posted to #%s | error=%s",
                      dev_channel(), posted.get("error"))
+    return jsonify(payload), 200
+
+
+@tasks_bp.post("/tasks/ga-report")
+def ga_report():
+    """Post yesterday's traffic plus live users to Slack."""
+    if not _authorized():
+        return make_response("forbidden", 403)
+
+    report = build_ga_report()
+    payload: Dict[str, Any] = {
+        "ok": report["data"].get("ok", False),
+        "errors": report["data"].get("errors"),
+    }
+
+    if request.args.get("dry") == "1":
+        payload["posted"] = False
+        payload["preview"] = report["text"]
+        return jsonify(payload), 200
+
+    posted = slack.post_message(ga_channel(), report["text"])
+    payload["posted"] = bool(posted.get("ok"))
+    if not posted.get("ok"):
+        payload["slack_error"] = posted.get("error")
+        logger.error("GA report could not be posted to #%s | error=%s",
+                     ga_channel(), posted.get("error"))
     return jsonify(payload), 200
