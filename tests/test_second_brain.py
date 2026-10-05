@@ -87,7 +87,7 @@ def test_blank_entries_are_skipped():
 
 
 def test_build_prompt_still_works_with_no_argument():
-    assert "Hermes" in build_prompt()
+    assert "ব্যবসায়ী সুপার ইন্টেলিজেন্ট" in build_prompt()
 
 
 # --- capability honesty ---------------------------------------------------------

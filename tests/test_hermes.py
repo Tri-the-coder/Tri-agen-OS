@@ -152,7 +152,7 @@ def test_model_outage_falls_back_to_the_orchestrator(monkeypatch):
 
 def test_prompt_states_language_matching_and_free_only():
     prompt = build_prompt()
-    assert "Hermes" in prompt
+    assert "ব্যবসায়ী সুপার ইন্টেলিজেন্ট" in prompt
     assert "Bengali in, Bengali out" in prompt
     assert "free OpenRouter models" in prompt
     for model in models.DEFAULT_MODEL_CHAIN:

@@ -89,7 +89,7 @@ def telegram_webhook():
         try:
             result = complete(build_prompt(_stored_facts(orchestrator)), prompt_content)
             ai_text = result["content"]
-            logger.info("Hermes reply | chat_id=%s model=%s", chat_id, result["model"])
+            logger.info("Agent reply | chat_id=%s model=%s", chat_id, result["model"])
 
         except AllModelsUnavailable as error:
             logger.warning("Free model chain exhausted | chat_id=%s error=%s", chat_id, error)

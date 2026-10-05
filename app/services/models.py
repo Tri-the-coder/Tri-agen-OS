@@ -87,7 +87,7 @@ def complete(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
     headers = {
         "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY', '')}",
         "HTTP-Referer": os.getenv("APP_URL", "https://onrender.com"),
-        "X-Title": "Tri Buddy OS (Hermes)",
+        "X-Title": "Babosayee Super Intelligent",
         "Content-Type": "application/json",
     }
     messages = [
