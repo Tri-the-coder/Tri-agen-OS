@@ -12,6 +12,13 @@ DB_PATH = os.getenv("DB_PATH", "tri_buddy_os.db")
 DEFAULT_SCHEMA = "tri_buddy"
 
 
+def connect_timeout() -> int:
+    try:
+        return max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5")))
+    except ValueError:
+        return 5
+
+
 def database_url() -> str:
     return os.getenv("DATABASE_URL", "").strip()
 
@@ -106,7 +113,15 @@ def get_db_connection():
         # session state, and a transaction-mode pooler can hand the next statement to a
         # different backend session, which would silently drop it and let unqualified
         # names resolve against public. A startup option is applied per connection.
-        conn = psycopg.connect(database_url(), options=f"-c search_path={schema}")
+        # connect_timeout is essential, not a nicety. libpq tries every address the
+        # host resolves to, and without a bound a misconfigured DATABASE_URL makes
+        # /health hang - which makes Render's health check fail and leaves a deploy
+        # stuck "in progress" forever.
+        conn = psycopg.connect(
+            database_url(),
+            options=f"-c search_path={schema}",
+            connect_timeout=connect_timeout(),
+        )
         with conn.cursor() as cursor:
             # Explicitly named, so it works even before search_path resolves.
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')

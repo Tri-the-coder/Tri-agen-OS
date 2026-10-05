@@ -12,6 +12,8 @@ services:
         sync: false
       - key: DB_SCHEMA
         value: tri_buddy
+      - key: DB_CONNECT_TIMEOUT
+        value: 5
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
