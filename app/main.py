@@ -12,6 +12,8 @@ from app.agent.orchestrator import AgentOrchestrator
 from app.agent.prompt import build_prompt
 from app.db.session import init_db
 from app.services.models import AllModelsUnavailable, complete
+from app.services.vision import describe, fetch_telegram_photo
+from app.tools.web import as_context, fetch_page, find_urls
 
 load_dotenv()
 
@@ -64,7 +66,15 @@ def telegram_webhook():
     if sender.get("is_bot") is True:
         return jsonify({"status": "ignored", "reason": "loop_protection"}), 200
 
-    if not incoming_text:
+    photo_bytes = None
+    photos = message.get("photo") or []
+    if photos:
+        # Telegram sends several sizes; the last is the largest.
+        photo_bytes = fetch_telegram_photo(photos[-1].get("file_id", ""))
+        if photo_bytes and not incoming_text:
+            incoming_text = (message.get("caption") or "").strip() or "Describe this image."
+
+    if not incoming_text and not photo_bytes:
         return jsonify({"status": "ignored", "reason": "missing_context"}), 200
 
     prompt_content = incoming_text
@@ -87,7 +97,16 @@ def telegram_webhook():
         logger.info("Command handled | chat_id=%s reply=%s", chat_id, ai_text)
     else:
         try:
-            result = complete(build_prompt(_stored_facts(orchestrator)), prompt_content)
+            system_prompt = build_prompt(_stored_facts(orchestrator))
+
+            if photo_bytes:
+                result = describe(photo_bytes, prompt_content, system_prompt, mime="image/jpeg")
+            else:
+                pages = [fetch_page(url) for url in find_urls(prompt_content)[:3]]
+                if pages:
+                    system_prompt += as_context(pages)
+                result = complete(system_prompt, prompt_content)
+
             ai_text = result["content"]
             logger.info("Agent reply | chat_id=%s model=%s", chat_id, result["model"])
 

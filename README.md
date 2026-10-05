@@ -253,6 +253,28 @@ carrying `X-Slack-Retry-Num` are dropped to avoid answering twice. And the backg
 lives in the web process: if Render recycles or sleeps the instance mid-flight, that one
 answer is lost. On a free instance a cold start can also swallow the first request after idle.
 
+## Seeing images and web pages
+
+Send the bot a photo on Telegram and it reads it; the caption becomes the question. Images
+go to a separate free vision chain (`OPENROUTER_VISION_MODELS`, default
+`qwen/qwen3.8-27b:free`, then gemma, then `openrouter/free`), with the same fallback
+behaviour as the text chain. Images over 5MB are rejected.
+
+Put a link in a message and the page is fetched and included as context, up to three links
+per message and 12k characters per page. The bot cannot search, browse, or follow links
+found inside a fetched page - it only ever sees pages someone linked explicitly.
+
+Fetching is guarded against SSRF: loopback, private, link-local and reserved addresses are
+refused before any request is made, so the bot cannot be used to read cloud metadata or
+anything else inside the network. Non-HTTP schemes and non-text responses are refused too.
+
+Fetched text and image contents are framed in the prompt as source material, never as
+instructions, and the prompt tells the model to report rather than obey any directions
+found inside them.
+
+Slack image uploads are *not* supported - that needs the `files:read` scope, which the app
+does not have.
+
 ## Telegram setup
 1. Create a bot with [@BotFather](https://t.me/BotFather) and copy the bot token into `TELEGRAM_BOT_TOKEN`.
 2. Send the bot a message, then call `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your `chat.id` and set `TELEGRAM_CHAT_ID`.

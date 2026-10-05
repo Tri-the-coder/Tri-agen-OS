@@ -22,6 +22,8 @@ services:
         value: nvidia/nemotron-3-ultra-550b-a55b:free,qwen/qwen3.8-27b:free,apodex/apodex-1.1-mini:free
       - key: OPENROUTER_TIMEOUT
         value: 25
+      - key: OPENROUTER_VISION_MODELS
+        value: qwen/qwen3.8-27b:free,google/gemma-4-31b-it:free,openrouter/free
       - key: HEALTH_TOKEN
         sync: false
       - key: REDIS_URL
