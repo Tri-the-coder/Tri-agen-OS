@@ -199,6 +199,28 @@ Render's free plan has no cron, so scheduling is external:
 two repository secrets, `SERVICE_URL` and `HEALTH_TOKEN`. The call that wakes a sleeping
 instance is the same one that runs the check.
 
+### PR review
+
+`.github/workflows/pr-review.yml` runs on every pull request (opened, synchronised,
+reopened), fetches the diff with the workflow's own `GITHUB_TOKEN`, and POSTs it to
+`POST /tasks/pr-review`. The service reviews it and posts to `SLACK_DEV_CHANNEL`
+(default `byabosayee_devs`). Same `HEALTH_TOKEN` as the other task endpoints, and
+`?dry=1` returns the review without posting.
+
+The diff is sent *to* the service rather than fetched *by* it, so no GitHub token is
+stored in Render. Reviews of the same PR are deduplicated by a concurrency group, so
+pushing three times queues one review, not three. Diffs over 60k characters are truncated
+and the report says so.
+
+The review sees the diff and nothing else - not the rest of the codebase, the tests, or
+CI - and the prompt forbids claiming otherwise: no invented files or line numbers, no
+statements about tests passing, and uncertainty phrased as "if X is not handled in the
+caller, this would ..." rather than asserted as a bug. Every post carries that caveat. A
+failed review posts "nothing was checked" rather than staying silent, because silence
+reads as approval. The workflow never fails the PR.
+
+It is a first-pass reviewer on a free model, not a gate.
+
 ### Bot token scopes
 
 `commands`, `chat:write`, `app_mentions:read`, `im:history`, `im:read`, `im:write`,

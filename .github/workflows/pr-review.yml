@@ -1,0 +1,47 @@
+name: PR review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Several pushes to one PR should not queue several reviews.
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Review the diff and post it to Slack
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
+          SERVICE_URL: ${{ secrets.SERVICE_URL }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # The diff is sent to the service, so the service needs no GitHub token.
+          gh api "repos/$REPO/pulls/$PR" \
+            -H "Accept: application/vnd.github.v3.diff" > diff.txt
+          meta=$(gh api "repos/$REPO/pulls/$PR" \
+            --jq '{title,url:.html_url,author:.user.login,files_changed:.changed_files,additions,deletions}')
+
+          jq -n --argjson m "$meta" --arg pr "$PR" --rawfile d diff.txt \
+            '$m + {number: ($pr|tonumber), diff: $d}' > body.json
+
+          echo "diff bytes: $(wc -c < diff.txt)"
+
+          # A failed review must never block the PR, so this step does not fail the job.
+          code=$(curl -s -o out.json -w '%{http_code}' --max-time 300 \
+            -X POST "$SERVICE_URL/tasks/pr-review" \
+            -H "X-Health-Token: $HEALTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @body.json) || true
+          echo "HTTP $code"
+          cat out.json || true
