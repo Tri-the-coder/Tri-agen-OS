@@ -159,3 +159,53 @@ def test_model_failure_still_posts_a_notice(monkeypatch):
     body = _client(monkeypatch).post("/tasks/pr-review?token=cron-token", json=PR).get_json()
     assert body["reviewed"] is False
     assert "no review" in sent["text"], "silence would look like approval"
+
+
+# --- oversized PRs --------------------------------------------------------------
+
+def test_unfetchable_diff_is_treated_as_too_large():
+    assert pr_review.too_large({"diff_unavailable": True}) is True
+
+
+def test_many_files_is_too_large():
+    assert pr_review.too_large({"files_changed": pr_review.MAX_FILES_FOR_REVIEW + 1}) is True
+    assert pr_review.too_large({"files_changed": pr_review.MAX_FILES_FOR_REVIEW}) is False
+
+
+def test_bad_file_count_does_not_crash():
+    assert pr_review.too_large({"files_changed": "lots"}) is False
+
+
+def test_oversized_pr_costs_no_model_call(monkeypatch):
+    def explode(*a, **k):
+        raise AssertionError("an oversized PR must not reach the model")
+
+    monkeypatch.setattr(pr_review, "complete", explode)
+    result = pr_review.review({"files_changed": 500, "diff": "x" * 100})
+    assert result["skipped"] == "too_large"
+
+
+def test_oversized_message_does_not_imply_coverage():
+    text = pr_review.format_for_slack(
+        dict(PR, files_changed=81), {"ok": False, "skipped": "too_large"})
+    assert "Too large for automated review" in text
+    assert "nothing here has been checked" in text
+    assert "splitting" in text
+
+
+def test_oversized_pr_is_still_posted(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(tasks_api.slack, "post_message",
+                        lambda ch, text: sent.update(text=text) or {"ok": True})
+
+    def explode(*a, **k):
+        raise AssertionError("no model call expected")
+
+    monkeypatch.setattr(pr_review, "complete", explode)
+    body = _client(monkeypatch).post(
+        "/tasks/pr-review?token=cron-token",
+        json=dict(PR, files_changed=400, diff_unavailable=True)).get_json()
+
+    assert body["posted"] is True
+    assert body["reviewed"] is False
+    assert "Too large" in sent["text"], "the team must still hear about the PR"

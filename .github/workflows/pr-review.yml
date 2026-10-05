@@ -26,16 +26,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The diff is sent to the service, so the service needs no GitHub token.
-          gh api "repos/$REPO/pulls/$PR" \
-            -H "Accept: application/vnd.github.v3.diff" > diff.txt
           meta=$(gh api "repos/$REPO/pulls/$PR" \
             --jq '{title,url:.html_url,author:.user.login,files_changed:.changed_files,additions,deletions}')
 
-          jq -n --argjson m "$meta" --arg pr "$PR" --rawfile d diff.txt \
-            '$m + {number: ($pr|tonumber), diff: $d}' > body.json
+          # GitHub refuses to serve a diff past 300 files (HTTP 406), so a failure here
+          # is expected on very large PRs and must not fail the job.
+          if gh api "repos/$REPO/pulls/$PR" \
+               -H "Accept: application/vnd.github.v3.diff" > diff.txt 2>/dev/null; then
+            unavailable=false
+          else
+            unavailable=true
+            : > diff.txt
+          fi
 
-          echo "diff bytes: $(wc -c < diff.txt)"
+          echo "diff bytes: $(wc -c < diff.txt) | unavailable: $unavailable"
+
+          # The diff is sent to the service, so the service needs no GitHub token.
+          jq -n --argjson m "$meta" --arg pr "$PR" --argjson u "$unavailable" \
+            --rawfile d diff.txt \
+            '$m + {number: ($pr|tonumber), diff: $d, diff_unavailable: $u}' > body.json
 
           # A failed review must never block the PR, so this step does not fail the job.
           code=$(curl -s -o out.json -w '%{http_code}' --max-time 300 \

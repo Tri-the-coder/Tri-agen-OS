@@ -9,6 +9,10 @@ logger = logging.getLogger(__name__)
 # attention. Reviews past this point are truncated and the report says so.
 MAX_DIFF_CHARS = 60_000
 
+# Past this, a truncated review covers so little of the change that it misleads
+# more than it helps, so no model call is made at all.
+MAX_FILES_FOR_REVIEW = 60
+
 REVIEW_PROMPT = """You are reviewing one pull request for the team building Babosayee.
 
 WHAT YOU CAN SEE
@@ -61,8 +65,25 @@ def build_context(pr: Dict[str, Any]) -> str:
     return "\n".join(header) + "\n\n```diff\n" + diff + "\n```"
 
 
+def too_large(pr: Dict[str, Any]) -> bool:
+    """A PR beyond meaningful automated review.
+
+    GitHub refuses to serve a diff over 300 files at all, and even below that a
+    change of this size would be reviewed from a fraction of itself.
+    """
+    if pr.get("diff_unavailable"):
+        return True
+    try:
+        return int(pr.get("files_changed") or 0) > MAX_FILES_FOR_REVIEW
+    except (TypeError, ValueError):
+        return False
+
+
 def review(pr: Dict[str, Any]) -> Dict[str, Any]:
     """Run one review. Never raises: a failed review must not fail the PR check."""
+    if too_large(pr):
+        return {"ok": False, "skipped": "too_large", "text": None}
+
     if not (pr.get("diff") or "").strip():
         return {"ok": False, "error": "empty diff", "text": None}
 
@@ -89,6 +110,16 @@ def format_for_slack(pr: Dict[str, Any], result: Dict[str, Any]) -> str:
         f"{pr.get('files_changed', '?')} files "
         f"(+{pr.get('additions', '?')}/-{pr.get('deletions', '?')})"
     )
+
+    if result.get("skipped") == "too_large":
+        return (
+            f"{head}\n{stats}\n\n"
+            "*Too large for automated review.* No review was run, so nothing here has "
+            "been checked.\n"
+            f"A change this size cannot be reviewed from a diff - GitHub will not even "
+            f"serve one past 300 files - and a partial review would read as coverage it "
+            f"does not have. Worth splitting into reviewable pieces, or reviewing by hand."
+        )
 
     if not result.get("ok"):
         return (
