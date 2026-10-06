@@ -21,7 +21,45 @@ def property_id() -> str:
 
 
 def is_configured() -> bool:
-    return bool(property_id() and os.getenv("GA4_SERVICE_ACCOUNT_JSON", "").strip())
+    return not missing_settings()
+
+
+def missing_settings() -> List[str]:
+    """Which GA4 settings are absent or unusable, by name."""
+    missing = []
+    if not property_id():
+        missing.append("GA4_PROPERTY_ID")
+    elif not property_id().isdigit():
+        missing.append("GA4_PROPERTY_ID (must be the numeric id, not G-XXXX)")
+
+    raw = os.getenv("GA4_SERVICE_ACCOUNT_JSON", "").strip()
+    if not raw:
+        missing.append("GA4_SERVICE_ACCOUNT_JSON")
+    else:
+        try:
+            info = json.loads(raw)
+        except ValueError:
+            missing.append("GA4_SERVICE_ACCOUNT_JSON (not valid JSON)")
+        else:
+            for field in ("client_email", "private_key", "token_uri"):
+                if not info.get(field):
+                    missing.append(f"GA4_SERVICE_ACCOUNT_JSON (missing {field})")
+    return missing
+
+
+def config_status() -> Dict[str, Any]:
+    missing = missing_settings()
+    status: Dict[str, Any] = {"configured": not missing}
+    if missing:
+        status["missing"] = missing
+    else:
+        try:
+            info = json.loads(os.getenv("GA4_SERVICE_ACCOUNT_JSON", "{}"))
+            status["service_account"] = info.get("client_email")
+            status["property_id"] = property_id()
+        except ValueError:
+            pass
+    return status
 
 
 def _credentials():

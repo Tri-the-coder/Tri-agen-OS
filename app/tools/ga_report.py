@@ -23,8 +23,9 @@ def _percent(value: str) -> str:
 
 def collect() -> Dict[str, Any]:
     """Pull yesterday's numbers plus live users. Never raises."""
-    if not ga4.is_configured():
-        return {"ok": False, "error": "GA4 is not configured"}
+    missing = ga4.missing_settings()
+    if missing:
+        return {"ok": False, "error": "not configured: " + "; ".join(missing)}
 
     data: Dict[str, Any] = {"ok": True}
     # Each call is independent: one failing should not lose the others.

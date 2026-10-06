@@ -32,6 +32,38 @@ def test_bad_json_gives_a_clear_error(monkeypatch):
         ga4._credentials()
 
 
+def test_missing_settings_are_named(monkeypatch):
+    assert ga4.missing_settings() == ["GA4_PROPERTY_ID", "GA4_SERVICE_ACCOUNT_JSON"]
+
+
+def test_measurement_id_instead_of_property_id_is_caught(monkeypatch):
+    monkeypatch.setenv("GA4_PROPERTY_ID", "G-ABC123")
+    monkeypatch.setenv("GA4_SERVICE_ACCOUNT_JSON", "{}")
+    assert "numeric id" in ga4.missing_settings()[0]
+
+
+def test_incomplete_key_names_the_missing_fields(monkeypatch):
+    monkeypatch.setenv("GA4_PROPERTY_ID", "412345678")
+    monkeypatch.setenv("GA4_SERVICE_ACCOUNT_JSON", '{"client_email":"a@b.com"}')
+    missing = " ".join(ga4.missing_settings())
+    assert "private_key" in missing and "token_uri" in missing
+
+
+def test_config_status_hides_the_key(monkeypatch):
+    monkeypatch.setenv("GA4_PROPERTY_ID", "412345678")
+    monkeypatch.setenv("GA4_SERVICE_ACCOUNT_JSON",
+                       '{"client_email":"bot@p.iam.gserviceaccount.com",'
+                       '"private_key":"SECRET","token_uri":"t"}')
+    status = ga4.config_status()
+    assert status["configured"] is True
+    assert "SECRET" not in str(status), "the private key must never be echoed"
+
+
+def test_report_names_the_missing_variable():
+    text = ga_report.format_report({"ok": False, "error": "not configured: GA4_PROPERTY_ID"})
+    assert "GA4_PROPERTY_ID" in text
+
+
 def test_unconfigured_report_claims_nothing():
     text = ga_report.format_report({"ok": False, "error": "GA4 is not configured"})
     assert "Could not read Google Analytics" in text
