@@ -112,7 +112,7 @@ def test_percent_formatting(raw, expected):
 # --- partial failure ------------------------------------------------------------
 
 def test_one_failing_call_does_not_lose_the_rest(monkeypatch):
-    monkeypatch.setattr(ga4, "is_configured", lambda: True)
+    monkeypatch.setattr(ga4, "missing_settings", lambda: [])
     monkeypatch.setattr(ga4, "totals", lambda: TOTALS)
     monkeypatch.setattr(ga4, "top_sources", lambda: (_ for _ in ()).throw(RuntimeError("403")))
     monkeypatch.setattr(ga4, "top_pages", lambda: [{"path": "/", "views": "10"}])
@@ -126,7 +126,7 @@ def test_one_failing_call_does_not_lose_the_rest(monkeypatch):
 
 
 def test_total_failure_is_reported(monkeypatch):
-    monkeypatch.setattr(ga4, "is_configured", lambda: True)
+    monkeypatch.setattr(ga4, "missing_settings", lambda: [])
     for name in ("totals", "top_sources", "top_pages", "realtime_users"):
         monkeypatch.setattr(ga4, name, lambda: (_ for _ in ()).throw(RuntimeError("no access")))
     assert ga_report.collect()["ok"] is False
